@@ -286,13 +286,55 @@ final class ConvertEngine {
             case .latin(let w): res.items.append(ConvItem(raw: w, unknownWord: true)); i += 1
             }
         }
+        // which reading: the neighbours first (from the dictionary's example sentences), then your earlier
+        // choice for this word, then how common each reading is in the examples
         for k in res.items.indices where res.items[k].opts.count > 1 {
-            if let want = mem[memKey(res.items[k])],
-               let at = res.items[k].opts.firstIndex(where: { optID($0) == want }), at > 0 {
-                res.items[k].sel = at
+            // what you picked before for this word between the same neighbours always wins
+            if let want = mem[ctxMemKey(res.items, k)],
+               let at = res.items[k].opts.firstIndex(where: { optID($0) == want }) {
+                res.items[k].sel = at; continue
             }
+            let guess = contextPick(res.items, k)
+            if let g = guess, g.strong { res.items[k].sel = g.index; continue }
+            if let want = mem[memKey(res.items[k])],
+               let at = res.items[k].opts.firstIndex(where: { optID($0) == want }) {
+                res.items[k].sel = at; continue
+            }
+            if let g = guess { res.items[k].sel = g.index }
         }
         return res
+    }
+
+    /// the 漢字 next to item k (skipping spaces and punctuation, stopping at a new line)
+    private func neighbour(_ items: [ConvItem], _ k: Int, _ step: Int) -> String? {
+        var j = k + step
+        while j >= 0 && j < items.count {
+            let it = items[j]
+            if it.newline { return nil }
+            if it.isWord, let h = it.current.han, it.current.codes != nil {
+                return step < 0 ? h.last.map(String.init) : h.first.map(String.init)
+            }
+            j += step
+        }
+        return nil
+    }
+
+    /// best reading of a one-character word from its neighbours; strong = the neighbours themselves decided it
+    private func contextPick(_ items: [ConvItem], _ k: Int) -> (index: Int, strong: Bool)? {
+        guard let ctx = d.raw.ctx, items[k].src == "han", let h = items[k].opts.first?.han, h.count == 1 else { return nil }
+        let prev = neighbour(items, k, -1), next = neighbour(items, k, 1)
+        var best: (index: Int, score: Double, near: Int)? = nil
+        for (j, o) in items[k].opts.enumerated() {
+            guard let cs = o.codes, cs.count == 1, o.han == h else { continue }
+            let c = cs[0]
+            let l = prev.flatMap { ctx.l[$0 + "\t" + h + "\t" + c] } ?? 0
+            let r = next.flatMap { ctx.r[h + "\t" + c + "\t" + $0] } ?? 0
+            let u = ctx.u[h + "\t" + c] ?? 0
+            let score = 2 * Double(l + r) + 0.05 * Double(u)
+            if score > 0, best == nil || score > best!.score { best = (j, score, l + r) }
+        }
+        guard let b = best else { return nil }
+        return (b.index, b.near > 0)
     }
 
     // MARK: remembered picks
@@ -301,9 +343,16 @@ final class ConvertEngine {
     private func memKey(_ it: ConvItem) -> String {
         it.src == "han" ? "h:" + (it.opts[0].han ?? "") : "c:" + (it.opts[0].codes ?? []).joined(separator: " ") + ":" + String(it.opts.count)
     }
-    func remember(_ it: ConvItem) {
+    /// your choice for item k: remembered for this word, and for this word between these neighbours
+    func remember(_ items: [ConvItem], _ k: Int) {
+        let it = items[k]
         mem[memKey(it)] = optID(it.current)
+        mem[ctxMemKey(items, k)] = optID(it.current)
         UserDefaults.standard.set(mem, forKey: "ff-picks")
+    }
+
+    private func ctxMemKey(_ items: [ConvItem], _ k: Int) -> String {
+        "x:" + (neighbour(items, k, -1) ?? "") + "|" + memKey(items[k]) + "|" + (neighbour(items, k, 1) ?? "")
     }
 
     // MARK: writing the result

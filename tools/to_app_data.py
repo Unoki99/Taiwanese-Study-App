@@ -196,6 +196,26 @@ for c in syl:
     tl[c] = [m, num]
 pj = {c: code_to_poj(c) for c in syl}
 
+# reading in context: for characters with several readings, how often each reading appears in the
+# dictionary's example sentences, and next to which characters (helps the converter pick the reading)
+HANC = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U0003134f\u3007]")
+single = collections.defaultdict(set)
+for h, c in words:
+    if len(h) == 1: single[h].add(c)
+amb = {h for h, cs in single.items() if len(cs) > 1}
+cu, cl, cr = collections.Counter(), collections.Counter(), collections.Counter()
+for senses in ex.values():
+    for xs in senses:
+        for x in xs:
+            hs = HANC.findall(x[0]); cs = re.findall(r"\{\^?([^}]+)\}", x[1])
+            if len(hs) != len(cs): continue
+            for i, (h, c) in enumerate(zip(hs, cs)):
+                if h not in amb or c not in single[h]: continue
+                cu[h + "\t" + c] += 1
+                if i > 0: cl[hs[i - 1] + "\t" + h + "\t" + c] += 1
+                if i + 1 < len(hs): cr[h + "\t" + c + "\t" + hs[i + 1]] += 1
+ctx = {"u": dict(cu), "l": dict(cl), "r": dict(cr)}
+
 # how common each character is: ln(count) in rime-essay
 counts = collections.Counter()
 for line in open(ESSAY, encoding="utf-8"):
@@ -207,7 +227,7 @@ freq = {ch: round(math.log(counts[ch]), 1) for ch in sorted(chars) if counts[ch]
 out = {
     "v": 2, "words": words, "syl": syl, "tl": tl, "pj": pj,
     "defs": {"t": defs_t, "m": defs_m}, "pos": pos, "ex": ex, "reg": reg, "own": own, "au": au,
-    "gl": [[k, v] for k, v in gl.items()], "freq": freq, "dex": dex,
+    "gl": [[k, v] for k, v in gl.items()], "freq": freq, "dex": dex, "ctx": ctx,
     "places": D["places"], "g1": D["g1"], "types": D["types"], "cats": D["cats"],
     "alt": alt, "dia": dia, "tok": tok, "sub": sub, "typ": typ, "cat": cat,
     "sy": sy, "an": an, "var": var, "cmp": cmp, "names": nm, "sur": sr,

@@ -138,7 +138,7 @@ final class ConvModel: ObservableObject {
     func choose(_ item: Int, _ opt: Int) {
         guard result.items.indices.contains(item) else { return }
         result.items[item].sel = opt
-        engine?.remember(result.items[item])
+        engine?.remember(result.items, item)
     }
 }
 
@@ -196,6 +196,8 @@ struct ConvertPane: View {
             WordSheet(dict: dict, model: model, index: sel.index)
                 .environmentObject(store)
                 .presentationDetents([.medium, .large])
+                .presentationContentInteraction(.scrolls)
+                .presentationDragIndicator(.visible)
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -412,7 +414,7 @@ struct WordSheet: View {
             Group {
                 if model.result.items.indices.contains(index) {
                     let it = model.result.items[index]
-                    ScrollView {
+                    ScrollView(.vertical) {
                         VStack(alignment: .leading, spacing: 14) {
                             if it.opts.count > 1 { options(it) }
                             if let k = dict.keyOf(it.current), dict.baseKeys.contains(k) || dict.raw.defs.m[k] != nil {
@@ -445,10 +447,27 @@ struct WordSheet: View {
             }
             .dictDestinations(dict)
         }
+        #if targetEnvironment(macCatalyst)
+        .frame(minWidth: 560, idealWidth: 640, minHeight: 640, idealHeight: 760)
+        #endif
     }
 
     private func optText(_ o: Opt, _ mode: Int) -> AttributedString {
         guessColored(model.engine?.wordPieces(o, mode: mode, rom: rom, place: place) ?? [])
+    }
+
+    /// a short meaning for a reading choice: its 華語 words, or the start of its definition
+    private func gloss(_ o: Opt) -> String? {
+        guard let k = dict.keyOf(o) else { return nil }
+        let pos = (dict.raw.pos[k] ?? "").split(separator: "|").first.map(String.init) ?? ""
+        let text: String?
+        if let g = dict.gl[k], !g.isEmpty { text = g.prefix(5).map { $0.t }.joined(separator: "、") }
+        else if let t = dict.defText(k) {
+            text = t.replacingOccurrences(of: #"\d+\.\s*"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: "\n", with: "／")
+        } else { text = nil }
+        guard let t = text else { return nil }
+        return pos.isEmpty ? t : "〔\(pos)〕" + t
     }
 
     private func options(_ it: ConvItem) -> some View {
@@ -461,14 +480,23 @@ struct WordSheet: View {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Image(systemName: i == it.sel ? "largecircle.fill.circle" : "circle")
                             .foregroundStyle(i == it.sel ? T.greenInk : T.muted)
-                        Text(o.han ?? "—").font(.system(size: 20, weight: .semibold)).foregroundStyle(T.glyph)
-                        if o.codes != nil {
-                            Text(optText(o, 1))
-                                .font(T.lat(17)).foregroundStyle(T.greenInk)
-                            Text(optText(o, 2))
-                                .font(.footnote).foregroundStyle(T.purpleInk)
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text(o.han ?? "—").font(.system(size: 20, weight: .semibold)).foregroundStyle(T.glyph)
+                                if o.codes != nil {
+                                    Text(optText(o, 1))
+                                        .font(T.lat(17)).foregroundStyle(T.greenInk)
+                                    Text(optText(o, 2))
+                                        .font(.footnote).foregroundStyle(T.purpleInk)
+                                }
+                                if let l = o.label { Chip(text: l) }
+                                if let k = dict.keyOf(o), let r = dict.raw.reg[k] { RegChip(reg: r) }
+                            }
+                            if let g = gloss(o) {
+                                Text(g).font(.footnote).foregroundStyle(T.glyph.opacity(0.75))
+                                    .lineLimit(2).multilineTextAlignment(.leading)
+                            }
                         }
-                        if let l = o.label { Chip(text: l) }
                         Spacer(minLength: 0)
                     }
                     .padding(.vertical, 6).padding(.horizontal, 10)

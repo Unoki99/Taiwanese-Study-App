@@ -25,6 +25,14 @@ struct CmpEntry: Decodable {
     }
 }
 
+/// how often each reading of a character appears in the example sentences, alone (u) and after (l) / before (r)
+/// another character: keys "字\tcode", "前字\t字\tcode", "字\tcode\t後字"
+struct CtxRaw: Decodable {
+    let u: [String: Int]
+    let l: [String: Int]
+    let r: [String: Int]
+}
+
 struct DefsRaw: Decodable {
     let t: [String]
     let m: [String: Int]
@@ -58,10 +66,11 @@ struct DictRaw: Decodable {
     let types: [String]?
     let cats: [String]?
     let cat: [String: [Int]]?
+    let ctx: CtxRaw?
     let dex: [String: String]?          // places whose reading MOE states (the others are worked out by rule)
 
     enum CodingKeys: String, CodingKey {
-        case words, syl, tl, pj, defs, pos, ex, reg, own, au, gl, freq, places, alt, dia, tok, sub, typ, sy, an, cmp, names, sur, types, cats, cat, dex
+        case words, syl, tl, pj, defs, pos, ex, reg, own, au, gl, freq, places, alt, dia, tok, sub, typ, sy, an, cmp, names, sur, types, cats, cat, dex, ctx
         case variants = "var"
     }
 }
