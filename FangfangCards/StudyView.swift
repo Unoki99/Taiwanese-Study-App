@@ -168,7 +168,7 @@ struct StudyView: View {
                     label("例句填空")
                     if let x = q.example {
                         Text(x.bh ?? x.h).font(.title3).foregroundStyle(T.blueInk)
-                        if let br = x.br { Text(br[min(max(rom, 0), 2)]).font(T.lat(17)).foregroundStyle(T.greenInk) }
+                        if let br = store.blankRom(c, x, rom, place) { Text(br).font(T.lat(17)).foregroundStyle(T.greenInk) }
                         Text(x.z).font(.subheadline).foregroundStyle(T.muted)
                         HStack(spacing: 8) {
                             PlayButton(path: Audio.examplePath(x.n), size: 28)

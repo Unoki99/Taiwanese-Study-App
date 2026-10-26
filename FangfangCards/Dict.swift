@@ -382,6 +382,29 @@ final class Dict: @unchecked Sendable {
         sentencePieces(tpl, sys, place: place, han: han).map { $0.text }.joined()
     }
 
+    /// the template with syllables lower..<upper (by position) replaced by ＿＿ (for 例句填空)
+    static func blanked(_ tpl: String, _ r: Range<Int>) -> String {
+        var spans: [Range<String.Index>] = []
+        var i = tpl.startIndex
+        while let open = tpl[i...].firstIndex(of: "{"), let close = tpl[open...].firstIndex(of: "}") {
+            spans.append(open..<tpl.index(after: close))
+            i = tpl.index(after: close)
+        }
+        guard r.lowerBound >= 0, r.upperBound <= spans.count, !r.isEmpty else { return tpl }
+        var out = tpl
+        out.replaceSubrange(spans[r.lowerBound].lowerBound..<spans[r.upperBound - 1].upperBound, with: "＿＿")
+        return out
+    }
+
+    /// 例句填空 sentence in 羅馬字 for a place: the word's syllables blanked out, the rest in local readings
+    func blankSentencePieces(_ tpl: String, han: String, word codes: [String], _ sys: Int, place: Int) -> [(text: String, guessed: Bool)]? {
+        let base = tpl.matches(of: #/\{\^?([^}]*)\}/#).map { String($0.1) }
+        guard !codes.isEmpty, base.count >= codes.count,
+              let at = (0...(base.count - codes.count)).first(where: { Array(base[$0..<$0 + codes.count]) == codes }) else { return nil }
+        let t = place >= 0 ? dialectTemplate(han, tpl, place) : tpl
+        return sentencePieces(Dict.blanked(t, at..<at + codes.count), sys, place: place)
+    }
+
     /// does this example have a guessed reading for the place?
     func hasGuess(_ tpl: String, han: String, place: Int) -> Bool {
         guard place >= 0 else { return false }

@@ -237,6 +237,16 @@ final class Store: ObservableObject {
         return d.sentenceText(e[1], r, place: place, han: e[0])
     }
 
+    /// 例句填空: the example with the word blanked out, in the chosen place's readings
+    func blankRom(_ card: Card, _ x: Example, _ rom: Int, _ place: Int) -> AttributedString? {
+        let r = min(max(rom, 0), 2)
+        if place >= 0, let d = dict, let e = dictExample(d, card, x),
+           let ps = d.blankSentencePieces(e[1], han: e[0], word: Dict.codesOf(card.k).split(separator: " ").map(String.init), r, place: place) {
+            return guessColored(ps)
+        }
+        return x.br.map { AttributedString($0[r]) }
+    }
+
     /// does any example of this card have a guessed reading for the place?
     func cardHasGuess(_ card: Card, _ place: Int) -> Bool {
         guard place >= 0, let d = dict else { return false }
