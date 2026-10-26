@@ -87,10 +87,32 @@ struct ProminentButton: ViewModifier {
     }
 }
 
+/// Mac: a quiet frosted button. The system styles fill with the accent colour while the window is active,
+/// which made them bright green there.
+struct MacSoftStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(enabled ? T.glyph : T.muted)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 10).fill(configuration.isPressed ? T.key : T.fn.opacity(0.85)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(T.fnEdge, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
 struct SoftButton: ViewModifier {
     @AppStorage("glass") private var glassOn = true
 
     func body(content: Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        content.buttonStyle(MacSoftStyle())
+        #else
+        softBody(content)
+        #endif
+    }
+
+    @ViewBuilder private func softBody(_ content: Content) -> some View {
         if glassOn {
             if #available(iOS 26.0, *) {
                 content.buttonStyle(.glass)

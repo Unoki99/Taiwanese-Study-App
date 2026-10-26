@@ -23,7 +23,7 @@ struct FangfangCardsApp: App {
                 .onAppear { MacWindow.setUp() }
                 .environmentObject(store)
                 .preferredColorScheme(.dark)
-                .tint(T.greenInk)
+                .tint(AppTint.accent)
         }
         .onChange(of: scenePhase) { _, phase in
             // pull changes from the other device when the app opens, back up when it closes
@@ -87,7 +87,7 @@ struct SettingsButton: View {
     @EnvironmentObject var store: Store
     @State private var show = false
     var body: some View {
-        Button { show = true } label: { Image(systemName: "gearshape") }
+        Button { show = true } label: { Image(systemName: "gearshape").foregroundStyle(T.glyph) }
             .accessibilityLabel("設定")
             .sheet(isPresented: $show) {
                 NavigationStack {
@@ -116,4 +116,14 @@ enum MacWindow {
         }
         #endif
     }
+}
+
+enum AppTint {
+    /// light green on iPhone/iPad; on the Mac the system fills active buttons with the accent colour,
+    /// so it's the darker green there (light text stays readable)
+    #if targetEnvironment(macCatalyst)
+    static let accent = T.greenEdge
+    #else
+    static let accent = T.greenInk
+    #endif
 }
