@@ -152,8 +152,9 @@ for e in E:
             if (st == "G1") == (i in G1):
                 e.setdefault("d", {})[str(i)] = alt
 
-# dialects: 3. a character's reading that only adds r (o→or, e→er, i→ir) carries into compounds,
-#    but only where the compound uses that same reading of the character
+# dialects: 3. a character's local reading (as MOE states it in 語音差異) carries into compounds,
+#    but only where the compound uses that same reading of the character (same 台羅 spelling),
+#    so 十全 tsa̍p-tsn̂g follows 全 tsn̂g, while 十全 si̍p-tsuân (the literary reading) stays as it is
 R_ADD = {"ø": "ɵ", "e": "ə", "i": "ɨ"}
 def only_r(main, new):
     pm, pn = parse(main), parse(new)
@@ -170,7 +171,8 @@ for e in E:
     for pl, r in e["d"].items():
         if (e["i"], pl) not in explicit: continue
         n = r.split()
-        if len(n) == 1 and only_r(m[0], n[0]):
+        if len(n) == 1 and n[0] != m[0]:          # any local difference of this reading (matched by reading, so
+                                                 # a literary reading with its own spelling is never touched)
             rrule[(e["h"], m[0])][pl] = n[0]
 carried = 0
 for e in E:

@@ -36,6 +36,7 @@ struct FangfangCardsApp: App {
 struct RootView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var router = Router.shared
+    @AppStorage("place") private var place = -1
 
     private var tabs: some View {
         TabView(selection: $router.tab) {
@@ -80,6 +81,8 @@ struct RootView: View {
                 .task { store.load() }
             }
         }
+        // a place chosen anywhere: load the dictionary (guessed readings, example sentences)
+        .onChange(of: place) { if place >= 0 { store.loadDict() } }
     }
 }
 

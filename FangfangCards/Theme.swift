@@ -40,17 +40,25 @@ enum T {
 
 let ROM_NAMES = ["皓羅", "台羅", "白話字"]
 
-/// Taps through 皓羅 → 台羅 → 白話字.
+/// the 10 places of the MOE dictionary's 語音差異, in the data's order (腔口 index = position)
+let PLACE_NAMES = ["鹿港偏泉腔", "三峽偏泉腔", "臺北偏泉腔", "宜蘭偏漳腔", "臺南混合腔",
+                   "高雄混合腔", "金門偏泉腔", "馬公偏泉腔", "新竹偏泉腔", "臺中偏漳腔"]
+
+/// The spelling button (taps through 皓羅 → 台羅 → 白話字) with the 腔口 picker next to it.
+/// It's in the top bar of every page except 設定.
 struct RomButton: View {
     @AppStorage("rom") private var rom = 0
     @AppStorage("glass") private var glassOn = true
     var body: some View {
-        Button {
-            withAnimation(.snappy) { rom = (rom + 1) % 3 }
-        } label: {
-            label
+        HStack(spacing: 6) {
+            Button {
+                withAnimation(.snappy) { rom = (rom + 1) % 3 }
+            } label: {
+                label
+            }
+            .accessibilityLabel("切換羅馬字")
+            PlaceMenu()
         }
-        .accessibilityLabel("切換羅馬字")
     }
 
     @ViewBuilder private var label: some View {
@@ -124,5 +132,49 @@ struct Panel<Content: View>: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassSurface(RoundedRectangle(cornerRadius: 22), tint: T.fn.opacity(0.45))
+    }
+}
+
+/// 腔口: 通行 or one of the 10 places
+struct PlaceMenu: View {
+    @AppStorage("place") private var place = -1
+    @AppStorage("glass") private var glassOn = true
+    var body: some View {
+        Menu {
+            Picker("腔口", selection: $place) {
+                Text("通行").tag(-1)
+                ForEach(Array(PLACE_NAMES.enumerated()), id: \.offset) { i, p in Text(p).tag(i) }
+            }
+        } label: {
+            label
+        }
+        .accessibilityLabel("腔口")
+    }
+
+    private var name: String { place >= 0 && place < PLACE_NAMES.count ? String(PLACE_NAMES[place].prefix(2)) : "通行" }
+
+    @ViewBuilder private var label: some View {
+        if glassOn {
+            if #available(iOS 26.0, *) {
+                plainText      // the iOS 26 toolbar already puts this in glass
+            } else {
+                capsule
+            }
+        } else {
+            capsule
+        }
+    }
+    private var capsule: some View {
+        plainText
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(Capsule().fill(Color(hex: 0x4c3a5b)))
+            .overlay(Capsule().stroke(Color(hex: 0x7b3c9b), lineWidth: 2))
+    }
+    private var plainText: some View {
+        HStack(spacing: 2) {
+            Text(name).font(.subheadline.weight(.bold))
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+        }
+        .foregroundStyle(T.purpleInk)
     }
 }
