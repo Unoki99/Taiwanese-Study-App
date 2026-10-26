@@ -35,20 +35,21 @@ struct FangfangCardsApp: App {
 
 struct RootView: View {
     @EnvironmentObject var store: Store
+    @ObservedObject private var router = Router.shared
 
     private var tabs: some View {
-        TabView {
+        TabView(selection: $router.tab) {
             NavigationStack { NewDeckView().settingsButton() }
-                .tabItem { Label("新詞", systemImage: "rectangle.stack") }
+                .tabItem { Label("新詞", systemImage: "rectangle.stack") }.tag(0)
             NavigationStack { UnknownView().settingsButton() }
                 .tabItem { Label("不熟", systemImage: "questionmark.circle") }
-                .badge(store.unknownCount)
+                .badge(store.unknownCount).tag(1)
             NavigationStack { KnownView().settingsButton() }
-                .tabItem { Label("熟悉", systemImage: "checkmark.circle") }
+                .tabItem { Label("熟悉", systemImage: "checkmark.circle") }.tag(2)
             NavigationStack { ConverterView().settingsButton() }
-                .tabItem { Label("轉換", systemImage: "arrow.left.arrow.right") }
+                .tabItem { Label("轉換", systemImage: "arrow.left.arrow.right") }.tag(3)
             NavigationStack { DictionaryView().settingsButton() }
-                .tabItem { Label("詞典", systemImage: "character.book.closed") }
+                .tabItem { Label("詞典", systemImage: "character.book.closed") }.tag(4)
         }
     }
 
@@ -57,13 +58,13 @@ struct RootView: View {
             if store.loaded {
                 if #available(iOS 18.0, *) {
                     // iPad and Mac: the tabs can become a sidebar
-                    TabView {
-                        Tab("新詞", systemImage: "rectangle.stack") { NavigationStack { NewDeckView().settingsButton() } }
-                        Tab("不熟", systemImage: "questionmark.circle") { NavigationStack { UnknownView().settingsButton() } }
+                    TabView(selection: $router.tab) {
+                        Tab("新詞", systemImage: "rectangle.stack", value: 0) { NavigationStack { NewDeckView().settingsButton() } }
+                        Tab("不熟", systemImage: "questionmark.circle", value: 1) { NavigationStack { UnknownView().settingsButton() } }
                             .badge(store.unknownCount)
-                        Tab("熟悉", systemImage: "checkmark.circle") { NavigationStack { KnownView().settingsButton() } }
-                        Tab("轉換", systemImage: "arrow.left.arrow.right") { NavigationStack { ConverterView().settingsButton() } }
-                        Tab("詞典", systemImage: "character.book.closed") { NavigationStack { DictionaryView().settingsButton() } }
+                        Tab("熟悉", systemImage: "checkmark.circle", value: 2) { NavigationStack { KnownView().settingsButton() } }
+                        Tab("轉換", systemImage: "arrow.left.arrow.right", value: 3) { NavigationStack { ConverterView().settingsButton() } }
+                        Tab("詞典", systemImage: "character.book.closed", value: 4) { NavigationStack { DictionaryView().settingsButton() } }
                     }
                     .tabViewStyle(.sidebarAdaptable)
                 } else {

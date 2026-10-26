@@ -192,6 +192,11 @@ struct ConvertPane: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .onAppear { model.attach(dict) }
+        #if targetEnvironment(macCatalyst)
+        .navigationDestination(item: $openItem) { sel in
+            WordSheet(dict: dict, model: model, index: sel.index, inSheet: false)
+        }
+        #else
         .sheet(item: $openItem) { sel in
             WordSheet(dict: dict, model: model, index: sel.index)
                 .environmentObject(store)
@@ -199,6 +204,7 @@ struct ConvertPane: View {
                 .presentationContentInteraction(.scrolls)
                 .presentationDragIndicator(.visible)
         }
+        #endif
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
@@ -395,7 +401,7 @@ struct ConvertPane: View {
     }
 }
 
-struct ConvSelection: Identifiable {
+struct ConvSelection: Identifiable, Hashable {
     let index: Int
     var id: Int { index }
 }
@@ -405,12 +411,30 @@ struct WordSheet: View {
     let dict: Dict
     @ObservedObject var model: ConvModel
     let index: Int
+    /// false on the Mac: shown as a page in the 轉換 tab instead of a sheet (sheets there have a fixed size)
+    var inSheet = true
     @AppStorage("rom") private var rom = 0
     @AppStorage("place") private var place = -1
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        if inSheet {
+            NavigationStack {
+                page
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } }
+                        ToolbarItem(placement: .topBarLeading) { RomButton() }
+                    }
+                    .dictDestinations(dict)
+            }
+        } else {
+            page
+                .navigationTitle(model.result.items.indices.contains(index) ? (model.result.items[index].current.han ?? "") : "")
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
+        }
+    }
+
+    private var page: some View {
             Group {
                 if model.result.items.indices.contains(index) {
                     let it = model.result.items[index]
@@ -434,22 +458,16 @@ struct WordSheet: View {
                             }
                         }
                         .padding()
+                        .frame(maxWidth: 760, alignment: .leading)
+                        .frame(maxWidth: .infinity)
                     }
                 } else {
                     Text("")
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .appBackground()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("完成") { dismiss() } }
-                ToolbarItem(placement: .topBarLeading) { RomButton() }
-            }
-            .dictDestinations(dict)
-        }
-        #if targetEnvironment(macCatalyst)
-        .frame(minWidth: 560, idealWidth: 640, minHeight: 640, idealHeight: 760)
-        #endif
     }
 
     private func optText(_ o: Opt, _ mode: Int) -> AttributedString {

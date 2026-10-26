@@ -418,6 +418,9 @@ final class ConvertEngine {
             if prev == "w" || prev == "x" { space = mode != 0 || prev == "x" }
             else if prev == "p" { space = mode == 1 }
             let t = wordText(it.current, mode: mode, rom: rom, place: place)
+            // a light-tone word ("--ah") always joins the word before it: oh--ah, not oh --ah
+            if space, prev == "w", mode != 0,
+               wordText(it.current, mode: 1, rom: rom, place: place).hasPrefix("--") { space = false }
             out.append(((space ? " " : "") + t, idx))
             prev = "w"; lastText = t
         }
