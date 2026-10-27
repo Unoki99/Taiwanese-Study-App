@@ -18,7 +18,8 @@ for line in open(ESSAY, encoding="utf-8"):
 def syl(c, s, place=None):        # s: 0 皓羅, 1 台羅, 2 白話字, 3 方音
     if s == 3:
         z = SYLT[c][0]
-        return z.replace("ㄜ", "ㄛ") if place is not None and "ø" in c else z
+        # with a place chosen, Tâi-lô o is ㄛ — except 臺南 and 高雄, where o is always said ㄜ
+        return z.replace("ㄜ", "ㄛ") if place is not None and "ø" in c and not PLACES[place].startswith(("臺南", "高雄")) else z
     if s == 1: return D["tl"][c][0]
     if s == 2: return D["pj"][c]
     return SYLT[c][1]

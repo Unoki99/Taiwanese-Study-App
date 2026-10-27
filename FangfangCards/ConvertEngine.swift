@@ -11,6 +11,10 @@ struct ConvItem {
     var space = false
     var newline = false
     var unknownWord = false      // Latin text we couldn't read
+    /// how likely the chosen reading is right (0–1), from the example sentences; nil = not guessed (one reading, or your choice)
+    var likely: Double? = nil
+    /// the guess is shaky (about 80 % or less): shown with an orange underline
+    var unsure: Bool { (likely ?? 1) < 0.82 }
     var isWord: Bool { raw == nil && !space && !newline }
     var current: Opt { opts[min(sel, opts.count - 1)] }
 }
@@ -295,12 +299,13 @@ final class ConvertEngine {
                 res.items[k].sel = at; continue
             }
             let guess = contextPick(res.items, k)
-            if let g = guess, g.strong { res.items[k].sel = g.index; continue }
+            defer { if let g = guess { res.items[k].likely = ConvertEngine.likely(g.share[res.items[k].sel] ?? 0) } }
+            if let g = guess, g.strong, let i = g.index { res.items[k].sel = i; continue }
             if let want = mem[memKey(res.items[k])],
                let at = res.items[k].opts.firstIndex(where: { optID($0) == want }) {
                 res.items[k].sel = at; continue
             }
-            if let g = guess { res.items[k].sel = g.index }
+            if let g = guess, let i = g.index { res.items[k].sel = i }
         }
         return res
     }
@@ -319,22 +324,48 @@ final class ConvertEngine {
         return nil
     }
 
-    /// best reading of a one-character word from its neighbours; strong = the neighbours themselves decided it
-    private func contextPick(_ items: [ConvItem], _ k: Int) -> (index: Int, strong: Bool)? {
+    /// best reading of a one-character word from its neighbours; strong = the neighbours themselves decided it;
+    /// share = each reading's share of the evidence (neighbours if there are any, else how common it is)
+    private func contextPick(_ items: [ConvItem], _ k: Int) -> (index: Int?, strong: Bool, share: [Int: Double])? {
         guard let ctx = d.raw.ctx, items[k].src == "han", let h = items[k].opts.first?.han, h.count == 1 else { return nil }
         let prev = neighbour(items, k, -1), next = neighbour(items, k, 1)
         var best: (index: Int, score: Double, near: Int)? = nil
+        var near: [Int: Int] = [:], uses: [Int: Int] = [:]
         for (j, o) in items[k].opts.enumerated() {
             guard let cs = o.codes, cs.count == 1, o.han == h else { continue }
             let c = cs[0]
             let l = prev.flatMap { ctx.l[$0 + "\t" + h + "\t" + c] } ?? 0
             let r = next.flatMap { ctx.r[h + "\t" + c + "\t" + $0] } ?? 0
             let u = ctx.u[h + "\t" + c] ?? 0
+            near[j] = l + r; uses[j] = u
             let score = 2 * Double(l + r) + 0.05 * Double(u)
             if score > 0, best == nil || score > best!.score { best = (j, score, l + r) }
         }
-        guard let b = best else { return nil }
-        return (b.index, b.near > 0)
+        guard near.count > 1 else { return nil }
+        let n = Double(near.count)
+        let nearSum = Double(near.values.reduce(0, +)), useSum = Double(uses.values.reduce(0, +))
+        var share: [Int: Double] = [:]
+        for j in near.keys {
+            share[j] = nearSum > 0 ? (Double(near[j]!) + 0.5) / (nearSum + 0.5 * n)
+                                   : (Double(uses[j]!) + 1) / (useSum + n)
+        }
+        return (best?.index, (best?.near ?? 0) > 0, share)
+    }
+
+    /// share of the evidence → how often such a guess was right in the example sentences (tested on a tenth
+    /// of them that weren't used for counting)
+    static func likely(_ share: Double) -> Double {
+        switch share {
+        case ..<0.5: return 0.37
+        case ..<0.55: return 0.65
+        case ..<0.6: return 0.76
+        case ..<0.7: return 0.81
+        case ..<0.75: return 0.88
+        case ..<0.8: return 0.93
+        case ..<0.9: return 0.96
+        case ..<0.95: return 0.98
+        default: return 0.99
+        }
     }
 
     // MARK: remembered picks

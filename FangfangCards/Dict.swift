@@ -100,6 +100,8 @@ final class Dict: @unchecked Sendable {
     let baseKeys: Set<String>
     let own: Set<String>
     let subst: Set<String>
+    /// places where 台羅 o is always said ㄜ (臺南, 高雄)
+    let orPlaces: Set<Int>
     private(set) var hanMap: [String: [String]] = [:]        // 漢字 -> codes strings
     private(set) var codeMap: [String: [String]] = [:]       // codes string -> 漢字
     private(set) var hanAlt: [String: [Opt]] = [:]
@@ -129,6 +131,7 @@ final class Dict: @unchecked Sendable {
         baseKeys = Set(r.words.map { $0[0] + "\t" + $0[1] })
         own = Set(r.own)
         subst = Set(r.sub)
+        orPlaces = Set(r.places.indices.filter { r.places[$0].hasPrefix("臺南") || r.places[$0].hasPrefix("高雄") })
 
         func push(_ m: inout [String: [String]], _ k: String, _ v: String) {
             if var a = m[k] { if !a.contains(v) { a.append(v); m[k] = a } } else { m[k] = [v] }
@@ -263,7 +266,8 @@ final class Dict: @unchecked Sendable {
     func syl(_ c: String, _ sys: Int, _ place: Int) -> String {
         guard let s = raw.syl[c] else { return c }
         switch sys {
-        case 3: return place >= 0 && c.contains("ø") ? s[0].replacingOccurrences(of: "ㄜ", with: "ㄛ") : s[0]
+        // with a place chosen, 台羅 o is ㄛ — except in 臺南 and 高雄, where o is always said ㄜ
+        case 3: return place >= 0 && c.contains("ø") && !orPlaces.contains(place) ? s[0].replacingOccurrences(of: "ㄜ", with: "ㄛ") : s[0]
         case 1: return raw.tl[c]?.first ?? s[1]
         case 2: return raw.pj[c] ?? s[1]
         default: return s[1]

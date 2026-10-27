@@ -138,6 +138,7 @@ final class ConvModel: ObservableObject {
     func choose(_ item: Int, _ opt: Int) {
         guard result.items.indices.contains(item) else { return }
         result.items[item].sel = opt
+        result.items[item].likely = nil          // your choice: no longer a guess
         engine?.remember(result.items, item)
     }
 }
@@ -244,7 +245,7 @@ struct ConvertPane: View {
             .softButton()
             .disabled(all)
         }
-        Text("點詞可以看意思、換讀音、收藏、加到「不熟」。有底色 = 已收藏或在「不熟」。橘色 = 字典裡找不到。")
+        Text("點詞可以看意思、換讀音、收藏、加到「不熟」。有底色 = 已收藏或在「不熟」。橘色 = 字典裡找不到，或讀音不太確定（猜對的機會約 80% 以下），點一下可以確認。")
             .font(.caption).foregroundStyle(T.muted)
     }
 
@@ -356,13 +357,15 @@ struct ConvertPane: View {
                         a.swiftUI.foregroundColor = .orange
                     } else {
                         var colored = false
-                        if mode != 0, let e = model.engine {
+                        if it.unsure { colored = true }                     // shaky guess: the whole word orange
+                        else if mode != 0, let e = model.engine {
                             let ps = e.wordPieces(it.current, mode: mode, rom: rom, place: place)
                             if ps.contains(where: { $0.guessed }) { a = guessColored(ps, ink: ink); colored = true }
                         }
                         a.link = URL(string: "ff://w/\(i)")
-                        if !colored { a.swiftUI.foregroundColor = ink }
-                        if it.opts.count > 1 { a.swiftUI.underlineStyle = Text.LineStyle(pattern: .dot, color: ink.opacity(0.6)) }
+                        if it.unsure { a.swiftUI.foregroundColor = .orange }
+                        else if !colored { a.swiftUI.foregroundColor = ink }
+                        if it.opts.count > 1 { a.swiftUI.underlineStyle = Text.LineStyle(pattern: .dot, color: (it.unsure ? Color.orange : ink).opacity(0.6)) }
                         if let k = dict.keyOf(it.current), store.isSaved(k) || store.cardStatus(k) == 2 {
                             a.swiftUI.backgroundColor = T.olive.opacity(0.85)
                         }
@@ -490,7 +493,13 @@ struct WordSheet: View {
 
     private func options(_ it: ConvItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("選讀音／漢字").font(.caption.weight(.bold)).foregroundStyle(T.muted)
+            HStack(spacing: 6) {
+                Text("選讀音／漢字").font(.caption.weight(.bold)).foregroundStyle(T.muted)
+                if let p = it.likely {
+                    Text("目前的讀音：猜對的機會約 \(Int((p * 100).rounded()))%")
+                        .font(.caption).foregroundStyle(it.unsure ? Color.orange : T.muted)
+                }
+            }
             ForEach(Array(it.opts.enumerated()), id: \.offset) { i, o in
                 Button {
                     withAnimation(.snappy) { model.choose(index, i) }

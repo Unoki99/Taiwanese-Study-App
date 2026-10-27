@@ -234,7 +234,7 @@ final class Store: ObservableObject {
         return AttributedString(card.rom(r, place))
     }
     func cardZy(_ card: Card, _ place: Int) -> AttributedString {
-        if place >= 0, let d = dict, !d.guessedSyllables(card.k, place).isEmpty { return d.wordText(card.k, 3, place) }
+        if place >= 0, let d = dict { return d.wordText(card.k, 3, place) }
         return AttributedString(card.zy(place))
     }
 
