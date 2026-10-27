@@ -38,6 +38,7 @@ for k, es in groups.items():
         if o["r"] != base["r"]: base.setdefault("a", []).append([o["r"], ""])
         for a in o.get("a", []): base.setdefault("a", []).append(a)
         for p_, r in o.get("d", {}).items(): base.setdefault("d", {}).setdefault(p_, r)
+        for p_, xs in o.get("dd", {}).items(): base.setdefault("dd", {}).setdefault(p_, xs)
         for p_ in o.get("dx", []):
             if base["d"].get(p_) == o["d"].get(p_) and p_ not in base.setdefault("dx", []): base["dx"].append(p_)
         if "au" not in base and "au" in o: base["au"] = o["au"]
@@ -49,7 +50,7 @@ for k, es in groups.items():
 
 words, seen = [], set()
 key_of = {}                                       # entry id -> key
-defs_t, defs_m, pos, ex, reg, au, alt, dia, tok, sub, typ, cat, own, dex = [], {}, {}, {}, {}, {}, {}, {}, {}, [], {}, {}, [], {}
+defs_t, defs_m, pos, ex, reg, au, alt, dia, tok, sub, typ, cat, own, dex, dia2 = [], {}, {}, {}, {}, {}, {}, {}, {}, [], {}, {}, [], {}, {}
 used = set()
 collisions = 0
 for e in D["E"]:
@@ -98,6 +99,11 @@ for e in D["E"]:
             dia.setdefault(k, {})[p] = rc
             used.update(rc.split())
             if p in e.get("dx", []): dex[k] = dex.get(k, "") + p     # MOE states it (not worked out by rule)
+    for p, xs in e.get("dd", {}).items():                        # the place also says it these ways
+        cs = [x for x in (codes_only(x) for x in xs) if x]
+        if cs:
+            dia2.setdefault(k, {})[p] = cs
+            for x in cs: used.update(x.split())
 
 for o, b_ in merged_into.items(): key_of[o] = key_of[b_]
 
@@ -227,7 +233,7 @@ freq = {ch: round(math.log(counts[ch]), 1) for ch in sorted(chars) if counts[ch]
 out = {
     "v": 2, "words": words, "syl": syl, "tl": tl, "pj": pj,
     "defs": {"t": defs_t, "m": defs_m}, "pos": pos, "ex": ex, "reg": reg, "own": own, "au": au,
-    "gl": [[k, v] for k, v in gl.items()], "freq": freq, "dex": dex, "ctx": ctx,
+    "gl": [[k, v] for k, v in gl.items()], "freq": freq, "dex": dex, "ctx": ctx, "dia2": dia2,
     "places": D["places"], "g1": D["g1"], "types": D["types"], "cats": D["cats"],
     "alt": alt, "dia": dia, "tok": tok, "sub": sub, "typ": typ, "cat": cat,
     "sy": sy, "an": an, "var": var, "cmp": cmp, "names": nm, "sur": sr,

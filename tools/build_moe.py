@@ -133,9 +133,12 @@ for r in S["語音差異"][1:]:
     e = by_id[r[0]]
     for i, cell in enumerate(r[2:]):
         if not cell.strip(): continue
-        first = rstr(reading(cell.split(",")[0]))
+        forms = [rstr(reading(x)) for x in cell.split(",") if x.strip()]
+        first = forms[0]
         if first != e.get("r"):
             e.setdefault("d", {})[str(i)] = first
+        if len(forms) > 1:                                     # the place says it more than one way
+            e.setdefault("dd", {})[str(i)] = forms[1:]
 explicit = {(e["i"], k) for e in E for k in e.get("d", {})}     # readings the file states
 for e in E:
     if e.get("d"): e["dx"] = sorted(e["d"], key=int)          # remembered, so the apps can tell stated from guessed
@@ -278,6 +281,49 @@ for r in S["詞彙比較"][1:]:
     item = [PLACES.index(place), han, rstr(reading(rom))]
     cmp.setdefault(zh, [])
     if item not in cmp[zh]: cmp[zh].append(item)
+
+# 詞彙比較 also tells how a word is said in each place, sometimes in two ways (粗紙 in 高雄:
+# tshoo-tsuá and thoo-tsuá). Where its word is a dictionary entry (same characters, same number of
+# syllables, closest reading), those readings are stated local readings too.
+by_han = collections.defaultdict(list)
+for e in E:
+    if "r" in e: by_han[e["h"]].append(e)
+said = collections.OrderedDict()                     # (han, place index) -> [readings]
+for r in S["詞彙比較"][1:]:
+    if len(r) < 5 or r[2] not in PLACES or not r[4].strip(): continue
+    k = (r[3], str(PLACES.index(r[2])))
+    rs = rstr(reading(r[4]))
+    if rs not in said.setdefault(k, []): said[k].append(rs)
+vocab_set = vocab_extra = 0
+for (han, pl), forms in said.items():
+    fc = [codes_only(f.split()) for f in forms]
+    cands = [e for e in by_han.get(han, []) if len(codes_only(e["r"].split())) == len(fc[0])]
+    if not cands: continue
+    def overlap(e):
+        m = codes_only(e["r"].split())
+        return max(sum(a == b for a, b in zip(m, f)) for f in fc)
+    best = max(overlap(e) for e in cands)
+    top = [e for e in cands if overlap(e) == best]
+    if len(top) != 1 or best == 0: continue
+    e = top[0]
+    main = codes_only(e["r"].split())
+    stated = []
+    if (e["i"], pl) in explicit:                     # 語音差異 first, then what 詞彙比較 adds
+        stated = [e["d"][pl]] + e.get("dd", {}).get(pl, [])
+    elif "dd" in e and pl in e["dd"]:
+        stated = [e["r"]] + e["dd"][pl]
+    for f in forms:
+        if codes_only(f.split()) not in [codes_only(x.split()) for x in stated]: stated.append(f)
+    if not stated: continue
+    if (e["i"], pl) not in explicit:
+        if codes_only(stated[0].split()) == main: e.get("d", {}).pop(pl, None)   # the place says it like 通行
+        else: e.setdefault("d", {})[pl] = stated[0]
+        e.setdefault("dx", [])
+        if pl not in e["dx"]: e["dx"].append(pl); vocab_set += 1
+    extra = [x for x in stated[1:] if codes_only(x.split()) != codes_only(stated[0].split())]
+    if extra:
+        e.setdefault("dd", {})[pl] = extra; vocab_extra += 1
+print("詞彙比較 readings used:", vocab_set, "places with a second reading:", vocab_extra)
 
 # 名 / 姓: readings of characters in names
 def name_sheet(sheet):

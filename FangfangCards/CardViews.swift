@@ -25,7 +25,12 @@ struct WordCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(store.cardRom(card, rom, place)).font(T.lat(26)).foregroundStyle(T.greenInk)
                     Text(store.cardZy(card, place)).font(.system(size: 18)).foregroundStyle(T.purpleInk)
-                    if let o = card.o?.first {
+                    if let x = store.alsoSaid(card, rom, place).first {
+                        HStack(spacing: 6) {
+                            Chip(text: "也講", fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
+                            Text(x.rom).font(T.lat(15)).foregroundStyle(T.greenInk.opacity(0.85))
+                        }
+                    } else if let o = card.o?.first {
                         HStack(spacing: 6) {
                             Chip(text: o.l)
                             Text(o.r[min(max(rom, 0), 2)]).font(T.lat(15)).foregroundStyle(T.greenInk.opacity(0.85))
@@ -143,7 +148,10 @@ struct CardDetail: View {
                             Text(store.cardRom(card, rom, place)).font(T.lat(24)).foregroundStyle(T.greenInk)
                             Text(store.cardZy(card, place)).font(.system(size: 17)).foregroundStyle(T.purpleInk)
                             // other readings, and the 通行 one when a place is shown
-                            if card.differs(in: place) {
+                            ForEach(Array(store.alsoSaid(card, rom, place).enumerated()), id: \.offset) { _, x in
+                                OtherRow(label: "也講", rom: x.rom, zy: x.zy)
+                            }
+                            if card.differs(in: place), !store.alsoSaid(card, rom, place).contains(where: { $0.rom == card.rom(rom) }) {
                                 OtherRow(label: "通行", rom: card.rom(rom), zy: card.z)
                             }
                             ForEach(Array((card.o ?? []).enumerated()), id: \.offset) { _, o in

@@ -67,10 +67,11 @@ struct DictRaw: Decodable {
     let cats: [String]?
     let cat: [String: [Int]]?
     let ctx: CtxRaw?
+    let dia2: [String: [String: [String]]]?   // other ways the place says the word (粗紙 in 高雄: tshoo-tsuá, thoo-tsuá)
     let dex: [String: String]?          // places whose reading MOE states (the others are worked out by rule)
 
     enum CodingKeys: String, CodingKey {
-        case words, syl, tl, pj, defs, pos, ex, reg, own, au, gl, freq, places, alt, dia, tok, sub, typ, sy, an, cmp, names, sur, types, cats, cat, dex, ctx
+        case words, syl, tl, pj, defs, pos, ex, reg, own, au, gl, freq, places, alt, dia, tok, sub, typ, sy, an, cmp, names, sur, types, cats, cat, dex, ctx, dia2
         case variants = "var"
     }
 }
@@ -489,10 +490,17 @@ final class Dict: @unchecked Sendable {
     }
 
     /// other readings: 又 / 俗 / 合, and the 通行 one when a place is shown
+    /// the place's other way(s) of saying the word, as codes
+    func alsoSaid(_ key: String, _ place: Int) -> [String] {
+        guard place >= 0 else { return [] }
+        return raw.dia2?[key]?[String(place)] ?? []
+    }
+
     func others(_ key: String, _ place: Int) -> [(label: String, codes: String, tokens: String?)] {
         var out: [(label: String, codes: String, tokens: String?)] = []
         let main = Dict.codesOf(key), shown = codesFor(key, place)
-        if shown != main { out.append(("通行", main, raw.tok[key])) }
+        for x in alsoSaid(key, place) where x != shown { out.append(("也講", x, nil)) }
+        if shown != main, !alsoSaid(key, place).contains(main) { out.append(("通行", main, raw.tok[key])) }
         for a in raw.alt[key] ?? [] where !a.isEmpty && a[0] != shown {
             out.append(((a.count > 1 && !a[1].isEmpty) ? a[1] : "又", a[0], a.count > 2 ? a[2] : nil))
         }

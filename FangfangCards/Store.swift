@@ -218,6 +218,13 @@ final class Store: ObservableObject {
         }
     }
 
+    /// the place's other way(s) of saying a card's word: (羅馬字, 方音)
+    func alsoSaid(_ card: Card, _ rom: Int, _ place: Int) -> [(rom: String, zy: String)] {
+        guard place >= 0, let d = dict else { return [] }
+        let r = min(max(rom, 0), 2)
+        return d.alsoSaid(card.k, place).map { (d.codes($0, r, place), d.codes($0, 3, place)) }
+    }
+
     /// a card's reading, with syllables guessed for the place in blue
     func cardRom(_ card: Card, _ rom: Int, _ place: Int) -> AttributedString {
         let r = min(max(rom, 0), 2)
