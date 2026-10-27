@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("glass") private var glassOn = true
     @AppStorage("place") private var place = -1
     @AppStorage("syncDevices") private var syncDevices = true
+    @AppStorage(TextSize.key) private var textSize = TextSize.standard
     @State private var pickFolder = false
 
     @State private var shareItem: ShareItem?
@@ -34,6 +35,17 @@ struct SettingsView: View {
                 .onChange(of: place) { if place >= 0 { store.loadDict() } }
                 Toggle("卡片先隱藏意思（點一下才顯示）", isOn: $hideMeaning)
                 Toggle("Liquid Glass 效果", isOn: $glassOn)
+                #if targetEnvironment(macCatalyst)
+                Stepper(value: Binding(get: { TextSize.clamp(textSize) }, set: { textSize = TextSize.clamp($0) }),
+                        in: 0...(TextSize.levels.count - 1)) {
+                    HStack {
+                        Text("文字大小")
+                        Spacer()
+                        Text(TextSize.names[TextSize.clamp(textSize)]).foregroundStyle(T.muted).monospacedDigit()
+                    }
+                }
+                Text("也可以用 ⌘+ 放大、⌘− 縮小、⌘0 回到原本大小。").font(.footnote).foregroundStyle(T.muted)
+                #endif
             }
             Section("發音") {
                 Toggle("新卡片自動播放發音", isOn: $autoPlay)

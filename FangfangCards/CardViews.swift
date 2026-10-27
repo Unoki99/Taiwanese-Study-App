@@ -15,7 +15,7 @@ struct WordCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text(card.h)
-                    .font(.system(size: card.h.count > 3 ? 44 : 60, weight: .medium))
+                    .scaledFont(card.h.count > 3 ? 44 : 60, weight: .medium)
                     .foregroundStyle(T.blueInk)
                     .lineLimit(1).minimumScaleFactor(0.5)
                 Spacer()
@@ -24,7 +24,7 @@ struct WordCard: View {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(store.cardRom(card, rom, place)).font(T.lat(26)).foregroundStyle(T.greenInk)
-                    Text(store.cardZy(card, place)).font(.system(size: 18)).foregroundStyle(T.purpleInk)
+                    Text(store.cardZy(card, place)).scaledFont(18).foregroundStyle(T.purpleInk)
                     if let x = store.alsoSaid(card, rom, place).first {
                         HStack(spacing: 6) {
                             Chip(text: "也講", fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
@@ -140,13 +140,13 @@ struct CardDetail: View {
                     Panel {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text(card.h).font(.system(size: 44, weight: .medium)).foregroundStyle(T.blueInk)
+                                Text(card.h).scaledFont(44, weight: .medium).foregroundStyle(T.blueInk)
                                 Spacer()
                                 CardChips(card: card, place: place)
                                 if let a = card.a { PlayButton(path: Audio.wordPath(a), size: 40) }
                             }
                             Text(store.cardRom(card, rom, place)).font(T.lat(24)).foregroundStyle(T.greenInk)
-                            Text(store.cardZy(card, place)).font(.system(size: 17)).foregroundStyle(T.purpleInk)
+                            Text(store.cardZy(card, place)).scaledFont(17).foregroundStyle(T.purpleInk)
                             // other readings, and the 通行 one when a place is shown
                             ForEach(Array(store.alsoSaid(card, rom, place).enumerated()), id: \.offset) { _, x in
                                 OtherRow(label: "也講", rom: x.rom, zy: x.zy)

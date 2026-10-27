@@ -262,7 +262,7 @@ struct ConvertPane: View {
             TextEditor(text: $model.text)
                 .focused($focused)
                 .scrollContentBackground(.hidden)
-                .font(.system(size: 18))
+                .scaledFont(18)
                 .frame(minHeight: 110, maxHeight: 220)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -278,7 +278,7 @@ struct ConvertPane: View {
                     Button { model.text = "" } label: { Image(systemName: "xmark.circle.fill") }
                 }
             }
-            .font(.system(size: 18))
+            .scaledFont(18)
             .foregroundStyle(T.muted)
             .padding(10)
         }
@@ -327,7 +327,8 @@ struct ConvertPane: View {
                 .foregroundStyle(T.muted)
             }
             Text(attributed(pieces, ink: ink, mode: mode))
-                .font(mode == 1 ? T.lat(19) : .system(size: mode == 0 ? 22 : 20))
+                .scaledFont(mode == 0 ? 22 : 20, on: mode != 1)
+                .font(T.lat(19))   // 羅馬字 box (the other boxes set their own size just above)
                 .tint(ink)
                 .lineSpacing(5)
                 .textSelection(.enabled)
@@ -451,7 +452,7 @@ struct WordSheet: View {
                             } else {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(model.engine?.wordText(it.current, mode: 0, rom: rom, place: place) ?? "")
-                                        .font(.system(size: 30, weight: .semibold))
+                                        .scaledFont(30, weight: .semibold)
                                     if it.current.codes != nil {
                                         Text(optText(it.current, 1))
                                             .font(T.lat(20)).foregroundStyle(T.greenInk)
@@ -511,7 +512,7 @@ struct WordSheet: View {
                             .foregroundStyle(i == it.sel ? T.greenInk : T.muted)
                         VStack(alignment: .leading, spacing: 3) {
                             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                Text(o.han ?? "—").font(.system(size: 20, weight: .semibold)).foregroundStyle(T.glyph)
+                                Text(o.han ?? "—").scaledFont(20, weight: .semibold).foregroundStyle(T.glyph)
                                 if o.codes != nil {
                                     Text(optText(o, 1))
                                         .font(T.lat(17)).foregroundStyle(T.greenInk)
@@ -564,6 +565,7 @@ struct DictEntryBody: View {
     @State private var swapWord: String?                  // the word picker for a place's own words
     @State private var swapZh: String?                    // …and the 華語 translation of its sentence
     @AppStorage("ff-swaps") private var swapsJSON = ""     // your choices (redraws when they change)
+    @AppStorage("ff-swap-off") private var swapOffJSON = "" // sentences with the 在地詞 switch off
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -629,6 +631,72 @@ struct DictEntryBody: View {
         swapWord = nil
     }
 
+    /// 在地詞: a switch for the place's own words in this sentence, and a menu to pick which word to use
+    @ViewBuilder private func swapControl(_ han0: String, _ tpl0: String, zh: String?) -> some View {
+        let _ = swapsJSON + swapOffJSON          // redraw when a choice or the switch changes
+        let words: [String] = {
+            guard place >= 0 else { return [] }
+            let loc = dict.localizedExample(han0, tpl0, place, zh: zh)
+            var out: [String] = []
+            for k in loc.words.keys.sorted() { if let w = loc.words[k], !w.isEmpty, !out.contains(w) { out.append(w) } }
+            return out
+        }()
+        if !words.isEmpty {
+            let k = Dict.swapOffKey(han0, place)
+            let on = !dict.swapsOff().contains(k)
+            VStack(alignment: .trailing, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("在地詞").font(.caption.weight(.bold)).foregroundStyle(on ? T.pinkInk : T.muted)
+                    Toggle("在地詞", isOn: Binding(get: { on }, set: { setSwapOn(k, $0) }))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(T.swapInk)
+                        .controlSize(.mini)
+                }
+                if on {
+                    Menu {
+                        ForEach(words, id: \.self) { w in
+                            let cur = dict.vocabSwap(w, place, zh: zh)?.han ?? w
+                            Section(w + " →") {
+                                ForEach(Array(dict.vocabOptions(w, place, zh: zh).enumerated()), id: \.offset) { _, o in
+                                    Button { choose(w, o.han) } label: {
+                                        let t = o.han + "　" + dict.codes(o.codes.joined(separator: " "), min(max(rom, 0), 2), place)
+                                        if cur == o.han { Label(t, systemImage: "checkmark") } else { Text(t) }
+                                    }
+                                }
+                                Button { choose(w, w) } label: {
+                                    let t = w + "（原本的詞）"
+                                    if cur == w { Label(t, systemImage: "checkmark") } else { Text(t) }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("選詞")
+                            Image(systemName: "chevron.down").font(.caption2.weight(.bold))
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(T.pinkInk)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(T.pink))
+                        .overlay(Capsule().stroke(T.pinkEdge, lineWidth: 1.5))
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .fixedSize()
+                }
+            }
+        }
+    }
+
+    private func setSwapOn(_ k: String, _ on: Bool) {
+        var s = dict.swapsOff()
+        if on { s.remove(k) } else { s.insert(k) }
+        withAnimation(.snappy) {
+            swapOffJSON = (try? String(data: JSONEncoder().encode(Array(s).sorted()), encoding: .utf8)) ?? swapOffJSON
+        }
+    }
+
     /// the example's 漢字 with each dictionary word tappable (opens its entry)
     private func exampleHan(_ han0: String, _ tpl0: String, zh: String?) -> AttributedString {
         var out = AttributedString()
@@ -673,7 +741,7 @@ struct DictEntryBody: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
-                Text(han).font(.system(size: 34, weight: .semibold)).foregroundStyle(T.glyph)
+                Text(han).scaledFont(34, weight: .semibold).foregroundStyle(T.glyph)
                 if let au = dict.raw.au[key] { PlayButton(path: Audio.wordPath(au)) }
                 Spacer()
             }
@@ -682,7 +750,7 @@ struct DictEntryBody: View {
                 star
             }
             Text(dict.wordText(key, rom, place)).font(T.lat(22)).foregroundStyle(T.greenInk).textSelection(.enabled)
-            Text(dict.wordText(key, 3, place)).font(.system(size: 19)).foregroundStyle(T.purpleInk).textSelection(.enabled)
+            Text(dict.wordText(key, 3, place)).scaledFont(19).foregroundStyle(T.purpleInk).textSelection(.enabled)
             HStack(spacing: 4) {
                 if let r = dict.raw.reg[key] { RegChip(reg: r) }
                 if dict.subst.contains(key) { Chip(text: "替", fill: T.rust, edge: T.rustEdge, ink: T.rustInk) }
@@ -842,7 +910,10 @@ struct DictEntryBody: View {
                     }
                     .textSelection(.enabled)
                     Spacer(minLength: 0)
-                    if e.count > 3, !e[3].isEmpty { PlayButton(path: Audio.examplePath(e[3]), size: 28) }
+                    VStack(alignment: .trailing, spacing: 8) {
+                        if e.count > 1 { swapControl(e[0], e[1], zh: e.count > 2 ? e[2] : nil) }
+                        if e.count > 3, !e[3].isEmpty { PlayButton(path: Audio.examplePath(e[3]), size: 28) }
+                    }
                 }
                 .padding(.leading, 18)
             }
@@ -1081,7 +1152,7 @@ struct LookupPane: View {
         List {
             Section {
                 TextField("華語、台語漢字、羅馬字或方音，例如：醫院、食飯、tsiah png", text: $query)
-                    .font(.system(size: 18))
+                    .scaledFont(18)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
             }
@@ -1152,7 +1223,7 @@ struct LookupPane: View {
     private func row(_ k: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Dict.hanOf(k)).font(.system(size: 20, weight: .semibold)).foregroundStyle(T.glyph)
+                Text(Dict.hanOf(k)).scaledFont(20, weight: .semibold).foregroundStyle(T.glyph)
                 Text(dict.wordText(k, rom, place)).font(T.lat(16)).foregroundStyle(T.greenInk)
                 Text(dict.wordText(k, 3, place)).font(.footnote).foregroundStyle(T.purpleInk)
                 if let r = dict.raw.reg[k] { RegChip(reg: r) }
@@ -1175,7 +1246,7 @@ struct LookupPane: View {
                 let key = dict.keyOf(Opt(han: row.han, codes: row.codes.split(separator: " ").map(String.init)))
                 let content = VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(row.han).font(.system(size: 18, weight: .semibold)).foregroundStyle(T.glyph)
+                        Text(row.han).scaledFont(18, weight: .semibold).foregroundStyle(T.glyph)
                         Text(dict.codes(row.codes, rom, -1)).font(T.lat(15)).foregroundStyle(T.greenInk)
                         Text(dict.codes(row.codes, 3, row.places.first ?? -1)).font(.footnote).foregroundStyle(T.purpleInk)
                     }
@@ -1255,7 +1326,7 @@ struct SavedPane: View {
     private func row(_ k: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Dict.hanOf(k)).font(.system(size: 20, weight: .semibold)).foregroundStyle(T.glyph)
+                Text(Dict.hanOf(k)).scaledFont(20, weight: .semibold).foregroundStyle(T.glyph)
                 Text(dict.wordText(k, rom, place)).font(T.lat(16)).foregroundStyle(T.greenInk)
                 Text(dict.wordText(k, 3, place)).font(.footnote).foregroundStyle(T.purpleInk)
                 Spacer(minLength: 0)
@@ -1365,7 +1436,7 @@ struct DictRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Dict.hanOf(key)).font(.system(size: 20, weight: .semibold)).foregroundStyle(T.glyph)
+                Text(Dict.hanOf(key)).scaledFont(20, weight: .semibold).foregroundStyle(T.glyph)
                 Text(dict.wordText(key, rom, place)).font(T.lat(16)).foregroundStyle(T.greenInk)
                 Text(dict.wordText(key, 3, place)).font(.footnote).foregroundStyle(T.purpleInk)
                 Spacer(minLength: 0)
@@ -1513,7 +1584,7 @@ struct PronunciationPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 TextField("台語漢字、羅馬字或方音，例如：做伙、四界、tsiah", text: $query)
-                    .font(.system(size: 18))
+                    .scaledFont(18)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .padding(12)
@@ -1529,7 +1600,7 @@ struct PronunciationPane: View {
                     NavigationLink(value: DictKey(k: k)) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(Dict.hanOf(k)).font(.system(size: 24, weight: .semibold)).foregroundStyle(T.glyph)
+                                Text(Dict.hanOf(k)).scaledFont(24, weight: .semibold).foregroundStyle(T.glyph)
                                 Text("通行").font(.caption).foregroundStyle(T.muted)
                                 Text(dict.word(k, min(max(rom, 0), 2), -1)).font(T.lat(16)).foregroundStyle(T.greenInk)
                                 Text(dict.word(k, 3, -1)).font(.footnote).foregroundStyle(T.purpleInk)

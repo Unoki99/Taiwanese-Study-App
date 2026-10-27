@@ -113,7 +113,7 @@ struct ToneView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("聽發音，選出正確的拼法").font(.subheadline.weight(.bold)).foregroundStyle(T.oliveInk)
                         HStack {
-                            Text(q.card.h).font(.system(size: 56, weight: .medium)).foregroundStyle(T.blueInk)
+                            Text(q.card.h).scaledFont(56, weight: .medium).foregroundStyle(T.blueInk)
                                 .lineLimit(1).minimumScaleFactor(0.5)
                             Spacer()
                             if let a = q.card.a { PlayButton(path: Audio.wordPath(a), size: 60) }

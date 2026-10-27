@@ -87,7 +87,7 @@ struct SwipeButtons: View {
             if let onUndo {
                 Button(action: onUndo) {
                     Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 18, weight: .bold))
+                        .scaledFont(18, weight: .bold)
                         .frame(width: 46, height: 46)
                         .foregroundStyle(canUndo ? T.oliveInk : T.fnEdge)
                         .glassSurface(Circle(), tint: T.fn.opacity(0.4), interactive: true)
@@ -104,7 +104,7 @@ struct SwipeButtons: View {
     private func round(_ icon: String, _ label: String, _ fill: Color, _ edge: Color, _ ink: Color, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 2) {
-                Image(systemName: icon).font(.system(size: 22, weight: .heavy))
+                Image(systemName: icon).scaledFont(22, weight: .heavy)
                 Text(label).font(.caption2.weight(.bold))
             }
             .frame(width: 68, height: 68)

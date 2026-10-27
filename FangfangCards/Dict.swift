@@ -399,30 +399,135 @@ final class Dict: @unchecked Sendable {
     private var vocabIndex: [String: [Int]]? = nil
     private let vocabLock = NSLock()
 
+    /// the 各地講法 index (word -> meanings it's listed for); call with vocabLock held
+    private func ensureVocabIndexLocked() {
+        if vocabIndex != nil { return }
+        var idx: [String: [Int]] = [:]
+        for (i, e) in raw.cmp.enumerated() {
+            for h in Set(e.rows.map { $0.han }) { idx[h, default: []].append(i) }
+        }
+        vocabIndex = idx
+        // 近義 links between words, by 漢字, both ways (啥物 ↔ 啥貨)
+        var syn: [String: Set<String>] = [:]
+        for (k, m) in raw.sy {
+            let a = Dict.hanOf(k)
+            for list in m.values {
+                for other in list {
+                    let b = Dict.hanOf(other)
+                    if a != b { syn[a, default: []].insert(b); syn[b, default: []].insert(a) }
+                }
+            }
+        }
+        synHan = syn
+    }
+    /// 近義 by 漢字, both ways: a place's word listed as 近義 of the original means the original is a normal word too
+    private var synHan: [String: Set<String>] = [:]
+
+    /// a word of the place's own, with whether it may be swapped in by itself (auto) or only picked in 選詞
+    struct VocabCandidate { let han: String; let codes: [String]; var auto: Bool }
+
     /// the words this place uses instead of `word`, from 詞彙比較: only when the place lists words for the
     /// meaning and `word` isn't one of them (做伙 → 金門 相佮). Empty = the place says it this way too.
     /// zh = the sentence's 華語 translation: a meaning only counts when its 華語 word is in it, so 愛 meaning
     /// 要 (你愛去 → 你要去) can become 欲, while 愛 meaning 喜歡 (我愛你) stays. No translation = no change.
-    func vocabOptions(_ word: String, _ place: Int, zh: String?) -> [(han: String, codes: [String])] {
+    /// A candidate is only swapped in by itself (auto) when the match is trustworthy:
+    ///  - the meaning's 華語 word that matched is longer than one character (是, 很, 要, 大, 頭, 家 match almost
+    ///    every sentence, so they say little about this one)
+    ///  - the meaning doesn't have a long list of ways to say it (6 or more words = people say it many ways, and
+    ///    a word missing from the place's list probably just wasn't recorded)
+    ///  - the candidate isn't the same word made longer or shorter (落雨 → 落雨天, 學校 → 公學校, 囡仔人 → 囡仔,
+    ///    目睭 → 目睭仁, 莫 → 莫去): those are variants, and the original is very likely said there too
+    ///  - MOE doesn't list the two as 近義 (啥物 ↔ 啥貨): then the original is a normal word in its own right
+    func vocabCandidates(_ word: String, _ place: Int, zh: String?) -> [VocabCandidate] {
         guard let zh, !zh.isEmpty else { return [] }
+        if sentenceCount(word) >= Dict.commonCutoff { return [] }     // a very common word: never changed, nothing to pick
         vocabLock.lock()
-        if vocabIndex == nil {
-            var idx: [String: [Int]] = [:]
-            for (i, e) in raw.cmp.enumerated() {
-                for h in Set(e.rows.map { $0.han }) { idx[h, default: []].append(i) }
-            }
-            vocabIndex = idx
-        }
+        ensureVocabIndexLocked()
         let concepts = vocabIndex?[word] ?? []
+        let syns = synHan[word] ?? []
         vocabLock.unlock()
-        var out: [(han: String, codes: [String])] = []
-        for i in concepts where Dict.conceptTerms(raw.cmp[i].zh).contains(where: { zh.contains($0) }) {
+        var out: [VocabCandidate] = []
+        for i in concepts {
+            let matched = Dict.conceptTerms(raw.cmp[i].zh).filter { zh.contains($0) }
+            if matched.isEmpty { continue }
             let rows = raw.cmp[i].rows.filter { $0.place == place }
             if rows.isEmpty { continue }                       // nothing known for this place
             if rows.contains(where: { $0.han == word }) { return [] }    // the place says it this way too
-            for r in rows where !out.contains(where: { $0.han == r.han }) {
+            let strongMeaning = matched.contains { $0.count > 1 } && Set(raw.cmp[i].rows.map { $0.han }).count < 6
+            for r in rows {
+                if Dict.wrongPairs.contains(word + "→" + r.han) { continue }
                 let codes = r.codes.split(separator: " ").map(String.init)
-                if !codes.isEmpty, codes.count == r.han.count, codes.allSatisfy({ isCode($0) }) { out.append((r.han, codes)) }
+                guard !codes.isEmpty, codes.count == r.han.count, codes.allSatisfy({ isCode($0) }) else { continue }
+                let auto = strongMeaning && !r.han.contains(word) && !word.contains(r.han) && !syns.contains(r.han)
+                if let j = out.firstIndex(where: { $0.han == r.han }) { out[j].auto = out[j].auto || auto }
+                else { out.append(VocabCandidate(han: r.han, codes: codes, auto: auto)) }
+            }
+        }
+        return out
+    }
+
+    /// pairs where the 華語 meaning matches but the words don't mean the same in a sentence: never swapped or offered
+    static let wrongPairs: Set<String> = ["無夠→較無一半", "穡頭→職業", "開講→畫虎𡳞", "烏白講→臭彈"]
+
+    /// every word the place could use instead (the 選詞 menu)
+    func vocabOptions(_ word: String, _ place: Int, zh: String?) -> [(han: String, codes: [String])] {
+        vocabCandidates(word, place, zh: zh).map { ($0.han, $0.codes) }
+    }
+
+    /// words used in this many example sentences or more are never swapped and can't be picked in 選詞
+    /// (是, 真, 愛, 毋通, 莫, 這馬, 啥物…): they're grammar and everyday words, and 各地講法 only covers one use of them.
+    static let commonCutoff = 100
+    private var wordCounts: [String: Int]? = nil
+
+    /// in how many MOE example sentences the word is used, split into words the same way as the swaps
+    /// (only counted for words in 各地講法)
+    func sentenceCount(_ word: String) -> Int {
+        vocabLock.lock(); defer { vocabLock.unlock() }
+        ensureVocabIndexLocked()
+        if wordCounts == nil {
+            var counts: [String: Int] = [:]
+            let listed = vocabIndex ?? [:]
+            for senses in raw.ex.values {
+                for exs in senses {
+                    for e in exs where e.count > 1 {
+                        for w in Set(sentenceWords(e[0], e[1])) where listed[w] != nil { counts[w, default: 0] += 1 }
+                    }
+                }
+            }
+            wordCounts = counts
+        }
+        return wordCounts?[word] ?? 0
+    }
+
+    /// an example's words: the dashes join syllables; inside a group, the longest dictionary words
+    private func sentenceWords(_ han: String, _ tpl: String) -> [String] {
+        let chars = Array(han)
+        let hanIdx = chars.indices.filter { chars[$0].unicodeScalars.first.map { ConvertEngine.isHan($0.value) } ?? false }
+        var codes: [String] = [], seps: [Substring] = []
+        var i = tpl.startIndex, prevEnd = tpl.startIndex
+        while let open = tpl[i...].firstIndex(of: "{"), let close = tpl[open...].firstIndex(of: "}") {
+            var start = tpl.index(after: open)
+            if start < close && tpl[start] == "^" { start = tpl.index(after: start) }
+            codes.append(String(tpl[start..<close])); seps.append(tpl[prevEnd..<open])
+            prevEnd = tpl.index(after: close); i = prevEnd
+        }
+        guard !codes.isEmpty, codes.count == hanIdx.count else { return [] }
+        var groups: [[Int]] = []
+        for n in codes.indices {
+            if n > 0, seps[n] == "-" || seps[n] == "--" { groups[groups.count - 1].append(n) } else { groups.append([n]) }
+        }
+        var out: [String] = []
+        for g in groups {
+            var a = 0
+            while a < g.count {
+                var step = 1
+                for L in stride(from: g.count - a, through: 1, by: -1) {
+                    let seg = g[a..<a + L]
+                    let w = seg.map { String(chars[hanIdx[$0]]) }.joined()
+                    let k = w + "\t" + seg.map { codes[$0] }.joined(separator: " ")
+                    if baseKeys.contains(k) || altParent[k] != nil { out.append(w); step = L; break }
+                }
+                a += step
             }
         }
         return out
@@ -447,15 +552,28 @@ final class Dict: @unchecked Sendable {
         return choiceCache.map
     }
 
-    /// the word to show instead of `word` for this place (nil = keep `word`): your choice, else the place's first word
+    /// sentences whose 在地詞 switch is off ("place|sentence 漢字"): they keep their original words
+    private var offCache: (raw: String, set: Set<String>) = ("", [])
+    func swapsOff() -> Set<String> {
+        let raw = UserDefaults.standard.string(forKey: "ff-swap-off") ?? ""
+        vocabLock.lock(); defer { vocabLock.unlock() }
+        if raw != offCache.raw {
+            offCache = (raw, Set((try? JSONDecoder().decode([String].self, from: Data(raw.utf8))) ?? []))
+        }
+        return offCache.set
+    }
+    static func swapOffKey(_ han: String, _ place: Int) -> String { "\(place)|\(han)" }
+
+    /// the word to show instead of `word` for this place (nil = keep `word`): your choice in 選詞; else the place's
+    /// first word whose match is trustworthy (see vocabCandidates; very common words have no candidates at all)
     func vocabSwap(_ word: String, _ place: Int, zh: String?) -> (han: String, codes: [String])? {
-        let opts = vocabOptions(word, place, zh: zh)
-        guard !opts.isEmpty else { return nil }
+        let cands = vocabCandidates(word, place, zh: zh)
+        guard !cands.isEmpty else { return nil }
         if let c = swapChoices()["\(place)|\(word)"] {
             if c == word { return nil }
-            if let o = opts.first(where: { $0.han == c }) { return o }
+            if let o = cands.first(where: { $0.han == c }) { return (o.han, o.codes) }
         }
-        return opts[0]
+        return cands.first(where: { $0.auto }).map { ($0.han, $0.codes) }
     }
 
     /// the example with the words the place says differently swapped in: new 漢字, new template (swapped
@@ -475,6 +593,7 @@ final class Dict: @unchecked Sendable {
             i = prevEnd
         }
         guard !tks.isEmpty, tks.count == hanIdx.count else { return (han, tpl, [], [:]) }
+        let off = swapsOff().contains(Dict.swapOffKey(han, place))     // the sentence's 在地詞 switch is off
         // words: the dashes join syllables; inside a group, the longest dictionary words
         var groups: [[Int]] = []
         for (n, t) in tks.enumerated() {
@@ -493,7 +612,7 @@ final class Dict: @unchecked Sendable {
                     let w = seg.map { String(chars[hanIdx[$0]]) }.joined()
                     let k = w + "\t" + seg.map { tks[$0].code }.joined(separator: " ")
                     if baseKeys.contains(k) || altParent[k] != nil {
-                        if let r = vocabSwap(w, place, zh: zh) { swaps[seg.first!] = (L, r.han, r.codes); origin[seg.first!] = w }
+                        if !off, let r = vocabSwap(w, place, zh: zh) { swaps[seg.first!] = (L, r.han, r.codes); origin[seg.first!] = w }
                         else if !vocabOptions(w, place, zh: zh).isEmpty { kept[seg.first!] = (L, w) }
                         step = L; break
                     }

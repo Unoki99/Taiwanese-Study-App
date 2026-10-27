@@ -24,7 +24,9 @@ struct FangfangCardsApp: App {
                 .environmentObject(store)
                 .preferredColorScheme(.dark)
                 .tint(AppTint.accent)
+                .macTextSize()
         }
+        .commands { TextSizeCommands() }
         .onChange(of: scenePhase) { _, phase in
             // pull changes from the other device when the app opens, back up when it closes
             if phase == .active { store.syncNow() }
@@ -99,6 +101,7 @@ struct SettingsButton: View {
                         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("完成") { show = false } } }
                 }
                 .environmentObject(store)
+                .macTextSize()
             }
     }
 }

@@ -151,7 +151,7 @@ struct StudyView: View {
                 case .wordToMeaning:
                     label("這個詞是什麼意思？")
                     HStack {
-                        Text(c.h).font(.system(size: 52, weight: .medium)).foregroundStyle(T.blueInk)
+                        Text(c.h).scaledFont(52, weight: .medium).foregroundStyle(T.blueInk)
                         Spacer()
                         if let a = c.a { PlayButton(path: Audio.wordPath(a), size: 44) }
                     }
@@ -177,7 +177,7 @@ struct StudyView: View {
                     }
                 case .romanization:
                     label("這個詞怎麼唸？")
-                    Text(c.h).font(.system(size: 60, weight: .medium)).foregroundStyle(T.blueInk)
+                    Text(c.h).scaledFont(60, weight: .medium).foregroundStyle(T.blueInk)
                     Text(c.firstMeaning).font(.footnote).foregroundStyle(T.muted).lineLimit(2)
                 }
             }
@@ -215,7 +215,7 @@ struct StudyView: View {
             case .romanization:
                 Text(store.cardRom(o, rom, place)).font(T.lat(22)).foregroundStyle(T.greenInk)
             default:
-                Text(o.h).font(.system(size: 30, weight: .medium)).foregroundStyle(T.blueInk)
+                Text(o.h).scaledFont(30, weight: .medium).foregroundStyle(T.blueInk)
                     .lineLimit(1).minimumScaleFactor(0.5)
                 if answered {
                     Text(store.cardRom(o, rom, place)).font(T.lat(14)).foregroundStyle(T.greenInk)
