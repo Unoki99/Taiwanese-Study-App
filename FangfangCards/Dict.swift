@@ -360,27 +360,178 @@ final class Dict: @unchecked Sendable {
     /// place's reading (the 漢字 sentence tells which syllables belong to which dictionary word).
     /// guessed = a reading the dictionary doesn't state for that word and place.
     func sentencePieces(_ tpl: String, _ sys: Int, place: Int = -1, han: String? = nil) -> [(text: String, guessed: Bool)] {
-        let t = (place >= 0 && han != nil) ? dialectTemplate(han!, tpl, place) : tpl
-        var out: [(text: String, guessed: Bool)] = []
+        examplePieces(tpl, sys, place: place, han: han, zh: nil).map { ($0.text, $0.mark == 1) }
+    }
+
+    /// an example sentence in 羅馬字 as pieces: mark 0 = as MOE has it (or a reading MOE states for the place),
+    /// 1 = guessed local reading, 2 = a word the place says differently (各地講法), swapped in.
+    /// With a place: the place's own words first (localizedExample), then its readings (dialectTemplate).
+    func examplePieces(_ tpl: String, _ sys: Int, place: Int = -1, han: String? = nil, zh: String? = nil) -> [(text: String, mark: Int)] {
+        var t = tpl
+        if place >= 0, let h = han {
+            let loc = localizedExample(h, tpl, place, zh: zh)
+            t = dialectTemplate(loc.han, loc.tpl, place)
+        }
+        var out: [(text: String, mark: Int)] = []
         var rest = Substring(t)
-        func plain(_ x: Substring) {
+        func put(_ x: String, _ m: Int) {
             guard !x.isEmpty else { return }
-            if let l = out.last, !l.guessed { out[out.count - 1].text += x } else { out.append((String(x), false)) }
+            if let l = out.last, l.mark == m { out[out.count - 1].text += x } else { out.append((x, m)) }
         }
         while let open = rest.firstIndex(of: "{"), let close = rest[open...].firstIndex(of: "}") {
-            plain(rest[..<open])
+            put(String(rest[..<open]), 0)
             var c = String(rest[rest.index(after: open)..<close])
             let cap = c.hasPrefix("^")
             if cap { c.removeFirst() }
-            let guessed = c.hasPrefix("?")
-            if guessed { c.removeFirst() }
+            var m = 0
+            if c.hasPrefix("?") { m = 1; c.removeFirst() } else if c.hasPrefix("!") { m = 2; c.removeFirst() }
             var s = isCode(c) ? syl(c, sys, place) : c
             if cap { s = s.prefix(1).uppercased() + s.dropFirst() }
-            if guessed { out.append((s, true)) } else { plain(Substring(s)) }
+            put(s, m)
             rest = rest[rest.index(after: close)...]
         }
-        plain(rest)
+        put(String(rest), 0)
         return out
+    }
+
+    // MARK: words each place says differently (各地講法)
+
+    private var vocabIndex: [String: [Int]]? = nil
+    private let vocabLock = NSLock()
+
+    /// the words this place uses instead of `word`, from 詞彙比較: only when the place lists words for the
+    /// meaning and `word` isn't one of them (做伙 → 金門 相佮). Empty = the place says it this way too.
+    /// zh = the sentence's 華語 translation: a meaning only counts when its 華語 word is in it, so 愛 meaning
+    /// 要 (你愛去 → 你要去) can become 欲, while 愛 meaning 喜歡 (我愛你) stays. No translation = no change.
+    func vocabOptions(_ word: String, _ place: Int, zh: String?) -> [(han: String, codes: [String])] {
+        guard let zh, !zh.isEmpty else { return [] }
+        vocabLock.lock()
+        if vocabIndex == nil {
+            var idx: [String: [Int]] = [:]
+            for (i, e) in raw.cmp.enumerated() {
+                for h in Set(e.rows.map { $0.han }) { idx[h, default: []].append(i) }
+            }
+            vocabIndex = idx
+        }
+        let concepts = vocabIndex?[word] ?? []
+        vocabLock.unlock()
+        var out: [(han: String, codes: [String])] = []
+        for i in concepts where Dict.conceptTerms(raw.cmp[i].zh).contains(where: { zh.contains($0) }) {
+            let rows = raw.cmp[i].rows.filter { $0.place == place }
+            if rows.isEmpty { continue }                       // nothing known for this place
+            if rows.contains(where: { $0.han == word }) { return [] }    // the place says it this way too
+            for r in rows where !out.contains(where: { $0.han == r.han }) {
+                let codes = r.codes.split(separator: " ").map(String.init)
+                if !codes.isEmpty, codes.count == r.han.count, codes.allSatisfy({ isCode($0) }) { out.append((r.han, codes)) }
+            }
+        }
+        return out
+    }
+
+    /// a 各地講法 meaning's 華語 words: notes in brackets dropped, alternatives split
+    /// ("土缸、醃缸" → 土缸, 醃缸; "父親(面稱)" → 父親)
+    static func conceptTerms(_ zh: String) -> [String] {
+        let t = zh.replacingOccurrences(of: #"[（(][^）)]*[）)]"#, with: "", options: .regularExpression)
+        return t.split(whereSeparator: { "、，, ".contains($0) }).map { String($0) }.filter { !$0.isEmpty }
+    }
+
+    /// your choices in the word picker: "place|original word" -> chosen word (the original = keep it)
+    private var choiceCache: (raw: String, map: [String: String]) = ("", [:])
+    func swapChoices() -> [String: String] {
+        let raw = UserDefaults.standard.string(forKey: "ff-swaps") ?? ""
+        vocabLock.lock(); defer { vocabLock.unlock() }
+        if raw != choiceCache.raw {
+            let m = (try? JSONDecoder().decode([String: String].self, from: Data(raw.utf8))) ?? [:]
+            choiceCache = (raw, m)
+        }
+        return choiceCache.map
+    }
+
+    /// the word to show instead of `word` for this place (nil = keep `word`): your choice, else the place's first word
+    func vocabSwap(_ word: String, _ place: Int, zh: String?) -> (han: String, codes: [String])? {
+        let opts = vocabOptions(word, place, zh: zh)
+        guard !opts.isEmpty else { return nil }
+        if let c = swapChoices()["\(place)|\(word)"] {
+            if c == word { return nil }
+            if let o = opts.first(where: { $0.han == c }) { return o }
+        }
+        return opts[0]
+    }
+
+    /// the example with the words the place says differently swapped in: new 漢字, new template (swapped
+    /// syllables written {!code}), and the positions of the swapped 漢字 in the new sentence
+    func localizedExample(_ han: String, _ tpl: String, _ place: Int, zh: String?) -> (han: String, tpl: String, swapped: Set<Int>, words: [Int: String]) {
+        let chars = Array(han)
+        let hanIdx = chars.indices.filter { chars[$0].unicodeScalars.first.map { ConvertEngine.isHan($0.value) } ?? false }
+        struct Tk { let range: Range<String.Index>; let code: String; let cap: Bool; let sep: Range<String.Index> }
+        var tks: [Tk] = []
+        var i = tpl.startIndex, prevEnd = tpl.startIndex
+        while let open = tpl[i...].firstIndex(of: "{"), let close = tpl[open...].firstIndex(of: "}") {
+            var start = tpl.index(after: open)
+            let cap = start < close && tpl[start] == "^"
+            if cap { start = tpl.index(after: start) }
+            tks.append(Tk(range: open..<tpl.index(after: close), code: String(tpl[start..<close]), cap: cap, sep: prevEnd..<open))
+            prevEnd = tpl.index(after: close)
+            i = prevEnd
+        }
+        guard !tks.isEmpty, tks.count == hanIdx.count else { return (han, tpl, [], [:]) }
+        // words: the dashes join syllables; inside a group, the longest dictionary words
+        var groups: [[Int]] = []
+        for (n, t) in tks.enumerated() {
+            let sep = tpl[t.sep]
+            if n > 0, sep == "-" || sep == "--" { groups[groups.count - 1].append(n) } else { groups.append([n]) }
+        }
+        var origin: [Int: String] = [:]
+        var swaps: [Int: (len: Int, han: String, codes: [String])] = [:]     // first syllable -> replacement
+        var kept: [Int: (len: Int, word: String)] = [:]                       // words with choices, kept as they are
+        for g in groups {
+            var a = 0
+            while a < g.count {
+                var step = 1
+                for L in stride(from: g.count - a, through: 1, by: -1) {
+                    let seg = g[a..<a + L]
+                    let w = seg.map { String(chars[hanIdx[$0]]) }.joined()
+                    let k = w + "\t" + seg.map { tks[$0].code }.joined(separator: " ")
+                    if baseKeys.contains(k) || altParent[k] != nil {
+                        if let r = vocabSwap(w, place, zh: zh) { swaps[seg.first!] = (L, r.han, r.codes); origin[seg.first!] = w }
+                        else if !vocabOptions(w, place, zh: zh).isEmpty { kept[seg.first!] = (L, w) }
+                        step = L; break
+                    }
+                }
+                a += step
+            }
+        }
+        if swaps.isEmpty && kept.isEmpty { return (han, tpl, [], [:]) }
+        // new template
+        var outT = "", n = 0
+        while n < tks.count {
+            outT += tpl[tks[n].sep]
+            if let s = swaps[n] {
+                outT += s.codes.enumerated().map { j, c in "{" + (j == 0 && tks[n].cap ? "^" : "") + "!" + c + "}" }.joined(separator: "-")
+                n += s.len
+            } else {
+                outT += tpl[tks[n].range]
+                n += 1
+            }
+        }
+        outT += tpl[tks[tks.count - 1].range.upperBound...]
+        // new 漢字
+        var outH: [Character] = [], swapped = Set<Int>(), skip = Set<Int>(), words: [Int: String] = [:]
+        let pos = Dictionary(uniqueKeysWithValues: hanIdx.enumerated().map { ($1, $0) })   // char index -> syllable
+        for (ci, ch) in chars.enumerated() {
+            if skip.contains(ci) { continue }
+            if let syl = pos[ci], let k = kept[syl] {
+                for j in 0..<k.len where syl + j < hanIdx.count { words[outH.count] = k.word; outH.append(chars[hanIdx[syl + j]]); if j > 0 { skip.insert(hanIdx[syl + j]) } }
+                continue
+            }
+            if let syl = pos[ci], let s = swaps[syl] {
+                for c in s.han { swapped.insert(outH.count); words[outH.count] = origin[syl] ?? ""; outH.append(c) }
+                for j in 1..<max(s.len, 1) where syl + j < hanIdx.count { skip.insert(hanIdx[syl + j]) }
+                continue
+            }
+            outH.append(ch)
+        }
+        return (String(outH), outT, swapped, words)
     }
 
     func sentence(_ tpl: String, _ sys: Int, place: Int = -1, han: String? = nil) -> String {

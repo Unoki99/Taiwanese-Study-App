@@ -561,6 +561,9 @@ struct DictEntryBody: View {
 
     private var han: String { Dict.hanOf(key) }
     @State private var tapped: DictKey?
+    @State private var swapWord: String?                  // the word picker for a place's own words
+    @State private var swapZh: String?                    // …and the 華語 translation of its sentence
+    @AppStorage("ff-swaps") private var swapsJSON = ""     // your choices (redraws when they change)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -602,12 +605,55 @@ struct DictEntryBody: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .navigationDestination(item: $tapped) { DictEntryView(dict: dict, key: $0.k) }
+        .confirmationDialog(swapTitle, isPresented: Binding(get: { swapWord != nil }, set: { if !$0 { swapWord = nil } }),
+                            titleVisibility: .visible) {
+            if let w = swapWord {
+                ForEach(Array(dict.vocabOptions(w, place, zh: swapZh).enumerated()), id: \.offset) { _, o in
+                    Button(o.han + "　" + dict.codes(o.codes.joined(separator: " "), min(max(rom, 0), 2), place)) { choose(w, o.han) }
+                }
+                Button("原本的詞：" + w + "　" + dict.word(dict.hanMap[w]?.first.map { w + "\t" + $0 } ?? w, min(max(rom, 0), 2), -1)) { choose(w, w) }
+            }
+            Button("取消", role: .cancel) { swapWord = nil }
+        }
+    }
+
+    private var swapTitle: String {
+        place >= 0 && place < dict.raw.places.count ? dict.raw.places[place] + "怎麼講？" : "怎麼講？"
+    }
+
+    /// remember which word to show for this place (the original word = keep it)
+    private func choose(_ word: String, _ pick: String) {
+        var m = (try? JSONDecoder().decode([String: String].self, from: Data(swapsJSON.utf8))) ?? [:]
+        m["\(place)|\(word)"] = pick
+        swapsJSON = (try? String(data: JSONEncoder().encode(m), encoding: .utf8)) ?? swapsJSON
+        swapWord = nil
     }
 
     /// the example's 漢字 with each dictionary word tappable (opens its entry)
-    private func exampleHan(_ han: String, _ tpl: String) -> AttributedString {
+    private func exampleHan(_ han0: String, _ tpl0: String, zh: String?) -> AttributedString {
         var out = AttributedString()
+        let loc = place >= 0 ? dict.localizedExample(han0, tpl0, place, zh: zh) : (han: han0, tpl: tpl0, swapped: Set<Int>(), words: [Int: String]())
+        let han = loc.han, tpl = loc.tpl
+        var at = 0
         for p in dict.exampleWords(han, tpl) {
+            defer { at += p.text.count }
+            if (0..<p.text.count).contains(where: { loc.words[at + $0] != nil }) {
+                // a word the chosen place may say differently: tap to choose (pink = swapped in)
+                for (j, ch) in p.text.enumerated() {
+                    var a = AttributedString(String(ch))
+                    if let orig = loc.words[at + j], let enc = orig.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+                       let encZh = (zh ?? "").addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+                       let url = URL(string: "ffswap://w/" + enc + "/" + encZh) {
+                        a.link = url
+                        a.swiftUI.foregroundColor = loc.swapped.contains(at + j) ? T.swapInk : T.glyph
+                        a.swiftUI.underlineStyle = Text.LineStyle(pattern: .dot, color: T.swapInk.opacity(0.8))
+                    } else {
+                        a.swiftUI.foregroundColor = T.glyph
+                    }
+                    out += a
+                }
+                continue
+            }
             var a = AttributedString(p.text)
             if let k = p.key, k != key, let enc = k.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
                let url = URL(string: "ffword://w/" + enc) {
@@ -773,19 +819,25 @@ struct DictEntryBody: View {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         if e.count > 1 {
-                            Text(exampleHan(e[0], e[1])).font(.body)
+                            Text(exampleHan(e[0], e[1], zh: e.count > 2 ? e[2] : nil)).font(.body)
                                 .environment(\.openURL, OpenURLAction { url in
-                                    let prefix = "ffword://w/"
+                                    let prefix = "ffword://w/", swapPrefix = "ffswap://w/"
                                     if url.absoluteString.hasPrefix(prefix),
                                        let k = String(url.absoluteString.dropFirst(prefix.count)).removingPercentEncoding {
                                         tapped = DictKey(k: k)
+                                    } else if url.absoluteString.hasPrefix(swapPrefix) {
+                                        let parts = url.absoluteString.dropFirst(swapPrefix.count).split(separator: "/", omittingEmptySubsequences: false)
+                                        if let w = parts.first.flatMap({ String($0).removingPercentEncoding }) {
+                                            swapWord = w
+                                            swapZh = parts.count > 1 ? String(parts[1]).removingPercentEncoding : nil
+                                        }
                                     }
                                     return .handled
                                 })
                         } else {
                             Text(e[0]).font(.body).foregroundStyle(T.glyph)
                         }
-                        if e.count > 1 { Text(dict.sentenceText(e[1], rom, place: place, han: e[0])).font(T.lat(15)).foregroundStyle(T.greenInk) }
+                        if e.count > 1 { Text(dict.sentenceText(e[1], rom, place: place, han: e[0], zh: e.count > 2 ? e[2] : nil)).font(T.lat(15)).foregroundStyle(T.greenInk) }
                         if e.count > 2, !e[2].isEmpty { Text(e[2]).font(.footnote).foregroundStyle(T.muted) }
                     }
                     .textSelection(.enabled)
@@ -1337,13 +1389,25 @@ struct DictRow: View {
 
 extension Dict {
     /// 羅馬字 of an example; readings guessed by rule (not stated by the dictionary) are red
-    func sentenceText(_ tpl: String, _ sys: Int, place: Int, han: String, ink: Color = T.greenInk) -> AttributedString {
+    func sentenceText(_ tpl: String, _ sys: Int, place: Int, han: String, zh: String? = nil, ink: Color = T.greenInk) -> AttributedString {
         var out = AttributedString()
-        for p in sentencePieces(tpl, sys, place: place, han: han) {
+        for p in examplePieces(tpl, sys, place: place, han: han, zh: zh) {
             var a = AttributedString(p.text)
-            if p.guessed {
-                a.swiftUI.foregroundColor = T.guessInk      // guessed readings in example sentences: red
-            }
+            if p.mark == 1 { a.swiftUI.foregroundColor = T.guessInk }        // guessed reading: red
+            if p.mark == 2 { a.swiftUI.foregroundColor = T.swapInk }         // the place's own word: pink
+            out += a
+        }
+        return out
+    }
+
+    /// an example's 漢字 for a place: words the place says differently swapped in, in pink
+    func exampleHanText(_ han: String, _ tpl: String, place: Int, zh: String?, base: Color) -> AttributedString {
+        guard place >= 0 else { var a = AttributedString(han); a.swiftUI.foregroundColor = base; return a }
+        let loc = localizedExample(han, tpl, place, zh: zh)
+        var out = AttributedString()
+        for (i, ch) in loc.han.enumerated() {
+            var a = AttributedString(String(ch))
+            a.swiftUI.foregroundColor = loc.swapped.contains(i) ? T.swapInk : base
             out += a
         }
         return out
@@ -1441,13 +1505,14 @@ struct PlacesTable: View {
 struct PronunciationPane: View {
     let dict: Dict
     @AppStorage("pronQuery") private var query = ""
+    @AppStorage("rom") private var rom = 0
     @State private var keys: [String] = []
     @State private var task: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                TextField("台語漢字、羅馬字、方音或華語，例如：做伙、四界、tsiah", text: $query)
+                TextField("台語漢字、羅馬字或方音，例如：做伙、四界、tsiah", text: $query)
                     .font(.system(size: 18))
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -1466,7 +1531,8 @@ struct PronunciationPane: View {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(Dict.hanOf(k)).font(.system(size: 24, weight: .semibold)).foregroundStyle(T.glyph)
                                 Text("通行").font(.caption).foregroundStyle(T.muted)
-                                Text(dict.word(k, 0, -1)).font(T.lat(16)).foregroundStyle(T.greenInk)
+                                Text(dict.word(k, min(max(rom, 0), 2), -1)).font(T.lat(16)).foregroundStyle(T.greenInk)
+                                Text(dict.word(k, 3, -1)).font(.footnote).foregroundStyle(T.purpleInk)
                                 Spacer(minLength: 0)
                                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(T.muted)
                             }
@@ -1489,19 +1555,38 @@ struct PronunciationPane: View {
         .onChange(of: query) { search() }
     }
 
+    /// only words that are exactly what was typed: the same 漢字 (all its readings), or the same 台語 spelling
+    /// (romanization or 方音, whole word). 華語 meanings and longer words containing it are not included.
+    nonisolated static func exact(_ d: Dict, _ q0: String) -> [String] {
+        let q = q0.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return [] }
+        var out: [String] = []
+        func add(_ k: String?) {
+            if let k, !out.contains(k), d.raw.defs.m[k] != nil || d.baseKeys.contains(k) { out.append(k) }
+        }
+        if q.unicodeScalars.allSatisfy({ ConvertEngine.isHan($0.value) }) {
+            for c in d.hanMap[q] ?? [] { add(d.keyOf(Opt(han: q, codes: c.split(separator: " ").map(String.init)))) }
+            return out
+        }
+        // 台語 spelling: whole-word matches only (same number of syllables as typed)
+        let typed = q.split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "‑" || $0 == "　" }).count
+        let zy = q.unicodeScalars.contains { ConvertEngine.isZy($0.value) }
+        for k in Lookup.taigi(d, q) where zy || Dict.codesOf(k).split(separator: " ").count == typed { add(k) }
+        if zy {   // 方音 has no separators: keep only words that are the whole input
+            let res = ConvertEngine(dict: d).convert(q)
+            let words = res.items.filter { $0.isWord }
+            if words.count != 1 { return [] }
+        }
+        return out
+    }
+
     private func search() {
         task?.cancel()
         let q = query, d = dict
         task = Task {
             try? await Task.sleep(nanoseconds: 250_000_000)
             guard !Task.isCancelled else { return }
-            let found: [String] = await Task.detached(priority: .userInitiated) {
-                let r = Lookup.run(d, q)
-                var out: [String] = []
-                for k in r.taigi + r.exact + r.pattern + r.contains + r.patternZh + r.gloss
-                where !out.contains(k) && d.raw.defs.m[k] != nil { out.append(k) }
-                return Array(out.prefix(12))
-            }.value
+            let found: [String] = await Task.detached(priority: .userInitiated) { PronunciationPane.exact(d, q) }.value
             guard !Task.isCancelled else { return }
             keys = found
         }

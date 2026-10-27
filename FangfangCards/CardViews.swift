@@ -63,7 +63,7 @@ struct WordCard: View {
                     HStack(alignment: .top, spacing: 10) {
                         PlayButton(path: Audio.examplePath(x.n), size: 28, onCard: true)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(x.h).foregroundStyle(T.blueInk)
+                            Text(store.exampleHan(card, x, place))
                             Text(store.exampleRom(card, x, rom, place)).font(T.lat(15)).foregroundStyle(T.greenInk)
                             Text(x.z).font(.footnote).foregroundStyle(T.muted)
                         }
@@ -181,7 +181,7 @@ struct CardDetail: View {
                                     HStack(alignment: .top, spacing: 10) {
                                         PlayButton(path: Audio.examplePath(x.n), size: 28)
                                         VStack(alignment: .leading, spacing: 3) {
-                                            Text(x.h).foregroundStyle(T.blueInk)
+                                            Text(store.exampleHan(card, x, place))
                                             Text(store.exampleRom(card, x, rom, place)).font(T.lat(15)).foregroundStyle(T.greenInk)
                                             Text(x.z).font(.footnote).foregroundStyle(T.muted)
                                         }

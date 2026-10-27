@@ -269,7 +269,7 @@ struct StudyView: View {
                     }
                     Text(c.firstMeaning).foregroundStyle(T.glyph)
                     if q.kind == .fillBlank, let x = q.example {
-                        Text(x.h).foregroundStyle(T.blueInk).padding(.top, 4)
+                        Text(store.exampleHan(c, x, place)).padding(.top, 4)
                         Text(store.exampleRom(c, x, rom, place)).font(T.lat(15)).foregroundStyle(T.greenInk)
                     }
                 }

@@ -243,7 +243,16 @@ final class Store: ObservableObject {
     func exampleRom(_ card: Card, _ x: Example, _ rom: Int, _ place: Int) -> AttributedString {
         let r = min(max(rom, 0), 2)
         guard place >= 0, let d = dict, let e = dictExample(d, card, x) else { return AttributedString(x.r[r]) }
-        return d.sentenceText(e[1], r, place: place, han: e[0])
+        return d.sentenceText(e[1], r, place: place, han: e[0], zh: e.count > 2 ? e[2] : nil)
+    }
+
+    /// a card's example in 漢字; with a place, the words that place says differently are swapped in (pink)
+    func exampleHan(_ card: Card, _ x: Example, _ place: Int) -> AttributedString {
+        if place >= 0, let d = dict, let e = dictExample(d, card, x) {
+            return d.exampleHanText(e[0], e[1], place: place, zh: e.count > 2 ? e[2] : nil, base: T.blueInk)
+        }
+        var a = AttributedString(x.h); a.swiftUI.foregroundColor = T.blueInk
+        return a
     }
 
     /// 例句填空: the example with the word blanked out, in the chosen place's readings

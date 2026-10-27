@@ -134,12 +134,13 @@ for r in S["語音差異"][1:]:
     for i, cell in enumerate(r[2:]):
         if not cell.strip(): continue
         forms = [rstr(reading(x)) for x in cell.split(",") if x.strip()]
+        e.setdefault("sf", {})[str(i)] = forms                 # every way MOE says the place says it
         first = forms[0]
         if first != e.get("r"):
             e.setdefault("d", {})[str(i)] = first
         if len(forms) > 1:                                     # the place says it more than one way
             e.setdefault("dd", {})[str(i)] = forms[1:]
-explicit = {(e["i"], k) for e in E for k in e.get("d", {})}     # readings the file states
+explicit = {(e["i"], k) for e in E for k in e.get("sf", {})}    # places the file states (also "like 通行")
 for e in E:
     if e.get("d"): e["dx"] = sorted(e["d"], key=int)          # remembered, so the apps can tell stated from guessed
 
@@ -176,7 +177,7 @@ for (han, pl), forms in said.items():
     main = codes_only(e["r"].split())
     stated = []
     if (e["i"], pl) in explicit:                     # 語音差異 first, then what 詞彙比較 adds
-        stated = [e["d"][pl]] + e.get("dd", {}).get(pl, [])
+        stated = list(e["sf"][pl])
     elif "dd" in e and pl in e["dd"]:
         stated = [e["r"]] + e["dd"][pl]
     for f in forms:
@@ -187,6 +188,7 @@ for (han, pl), forms in said.items():
         else: e.setdefault("d", {})[pl] = stated[0]
         e.setdefault("dx", [])
         if pl not in e["dx"]: e["dx"].append(pl); vocab_set += 1
+    e.setdefault("sf", {})[pl] = stated
     extra = [x for x in stated[1:] if codes_only(x.split()) != codes_only(stated[0].split())]
     if extra:
         e.setdefault("dd", {})[pl] = extra; vocab_extra += 1
@@ -227,67 +229,63 @@ for e in E:
         if m in [codes_only(x.split()) for x in e.get("dd", {}).get(pl, [])]: continue   # also said the 通行 way
         if len(n) == len(m): wrule[(e["h"], " ".join(m))][pl] = n
 
-# dialects: 3. for each place without MOE's own reading of the word, syllable by syllable:
-#    a. the local reading of a word inside it that MOE gives for the place, else the character's local
-#       reading (rule 2), else
-#    b. the syllable from MOE's "/" form for that place: the form that agrees with the local readings of
-#       the other syllables (按呢生 án-ne-senn / án-ní-sinn: 生 → sinn, so 呢 → ní), or else the
-#       enn/inn, e/i, inn/i, ueh/uih pair rule between the "/" forms
-#       (宜蘭, 臺南, 高雄, 臺中 enn/e/inn/ueh; the other places inn/i/i/uih), else
-#    c. the 通行 syllable
-carried = from_slash = 0
+# dialects: 3. for each place without MOE's own reading of the word.
+#    The "/" readings: the one before "/" is the 漳-leaning places' (宜蘭, 臺南, 高雄, 臺中), the one after
+#    "/" the others' (鹿港, 三峽, 臺北, 新竹, 馬公, 金門). That form is the word's "side" for the place.
+#    Then syllable by syllable:
+#    a. a word inside it that MOE gives for the place (鬥做伙 contains 做伙: 鹿港 tsuè-hér)
+#    b. the character's own readings for the place (same spelling of the character as the word uses):
+#       one reading → that one; two → the one that matches the side's syllable (四 in 鹿港 is sìr and sì;
+#       四界 sì-kè / sì-kuè → sì), else the first
+#    c. no information about the character → the side's syllable (四界 in 鹿港: 界 → kuè)
+def char_readings(ch, codes, pl):
+    """the place's stated readings of character ch, from the single-character entry spelt one of `codes`"""
+    for e in by_han.get(ch, []):
+        own = [codes_only(e["r"].split())] + [codes_only(a.split()) for a, label in e.get("a", []) if label == ""]
+        own = [o[0] for o in own if len(o) == 1]
+        if not any(c in own for c in codes): continue
+        forms = e.get("sf", {}).get(pl)
+        if forms:
+            out = []
+            for f in forms:
+                fc = codes_only(f.split())
+                if len(fc) == 1 and fc[0] not in out: out.append(fc[0])
+            if out: return out
+    return None
+carried = from_side = 0
 for e in E:
     if "r" not in e: continue
     toks = e["r"].split()
     code_pos = [i for i, t in enumerate(toks) if parse(t.lstrip("^"))]
     chars = list(e["h"])
     main = [toks[i].lstrip("^") for i in code_pos]
-    slash = [a for a, label in e.get("a", []) if label == ""]
-    slash = [a for a in slash if len(codes_only(a.split())) == len(main)]
+    slash = [a for a, label in e.get("a", []) if label == "" and len(codes_only(a.split())) == len(main)]
     for pl in map(str, range(len(PLACES))):
         if (e["i"], pl) in explicit: continue
-        local = {}                                   # syllable position -> local reading (rule a)
-        if len(main) == len(chars) and len(chars) > 1:
-            # a word inside this word that MOE gives for the place (鬥做伙 contains 做伙: 鹿港 tsuè-hér),
-            # longest first
-            for L in range(len(chars) - 1, 1, -1):
+        side = e["r"] if (not slash or int(pl) in G1) else slash[0]
+        base = side.split()
+        fpos = [i for i, t in enumerate(base) if parse(t.lstrip("^"))]
+        sc = [base[i].lstrip("^") for i in fpos]
+        if len(sc) == len(chars) == len(main):
+            local = {}
+            for L in range(len(chars) - 1, 1, -1):                     # a. words inside it
                 for st in range(0, len(chars) - L + 1):
                     if any(n in local for n in range(st, st + L)): continue
                     w = wrule.get(("".join(chars[st:st + L]), " ".join(main[st:st + L])), {}).get(pl)
                     if w and len(w) == L:
                         for j in range(L): local[st + j] = w[j]
-            for n, (ch, c) in enumerate(zip(chars, main)):
+            for n, ch in enumerate(chars):
                 if n in local: continue
-                new = rrule.get((ch, c), {}).get(pl)
-                if new: local[n] = new
-        # which "/" form fills the other syllables (rule b)
-        form = None
-        if slash:
-            def hits(f):
-                fc = codes_only(f.split())
-                return sum(1 for n, v in local.items()
-                           if fc[n] != main[n] and (fc[n] == v or rrule.get((chars[n], fc[n]), {}).get(pl) == v)) \
-                    if len(chars) == len(fc) else 0
-            best = max(slash, key=hits)
-            if local and hits(best) > 0 and any(codes_only(best.split())[n] != main[n] for n in range(len(main)) if n not in local):
-                form = best
-            if form is None:
-                for a in slash:
-                    st = style(e["r"], a)
-                    if st and (st == "G1") == (int(pl) in G1): form = a; break
-        base = (form or e["r"]).split()
-        fpos = [i for i, t in enumerate(base) if parse(t.lstrip("^"))]
-        if len(fpos) == len(chars) and len(chars) > 1:
-            for n, (ch, i) in enumerate(zip(chars, fpos)):
-                c = base[i].lstrip("^")
-                new = local.get(n) if c == main[n] else rrule.get((ch, c), {}).get(pl)
-                if new: base[i] = ("^" if base[i].startswith("^") else "") + new
-        if codes_only(base) == main: continue
+                rd = char_readings(ch, [main[n], sc[n]], pl) if len(chars) > 1 else None
+                if not rd: continue                                    # c. keep the side's syllable
+                local[n] = rd[0] if len(rd) == 1 else (sc[n] if sc[n] in rd else rd[0])   # b.
+            for n, i in enumerate(fpos):
+                if n in local: base[i] = ("^" if base[i].startswith("^") else "") + local[n]
+        if codes_only(base) == main: e.get("d", {}).pop(pl, None); continue
         e.setdefault("d", {})[pl] = " ".join(base)
-        if form: from_slash += 1
+        if side != e["r"]: from_side += 1
         else: carried += 1
-
-print("rules", len(rrule), "local readings carried into words", carried, "using a / form", from_slash)
+print("local readings: from characters / words inside", carried, "on the / side", from_side)
 
 # senses, examples
 sense_entry, sense_ord = {}, {}

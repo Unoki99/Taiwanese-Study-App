@@ -33,6 +33,8 @@ enum T {
     static let pink = Color(hex: 0x5e3a4f)
     /// guessed (推測) readings
     static let guessInk = Color(hex: 0xff7a6e)
+    /// a word swapped for the one the chosen place uses (各地講法)
+    static let swapInk = Color(hex: 0xff9fd2)
     static let pinkEdge = Color(hex: 0xa04a78)
     static let pinkInk = Color(hex: 0xf8cbe2)
 
