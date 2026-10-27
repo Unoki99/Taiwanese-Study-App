@@ -5,7 +5,7 @@ import AVFoundation
 
 @main
 struct FangfangCardsApp: App {
-    @StateObject private var store = Store()
+    @StateObject private var store = Store.shared
     @Environment(\.scenePhase) private var scenePhase
 
     init() {

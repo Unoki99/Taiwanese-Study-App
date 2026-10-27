@@ -3,6 +3,8 @@ import SwiftUI
 
 @MainActor
 final class Store: ObservableObject {
+    /// one store for the app and for Shortcuts actions that run while the app isn't open
+    static let shared = Store()
     @Published private(set) var cards: [Card] = []
     @Published private(set) var loaded = false
     @Published private(set) var loadError: String?
