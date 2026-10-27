@@ -576,6 +576,7 @@ struct DictEntryBody: View {
             namesRow
             variantsRow
             categoriesRow
+            otherWordsRow
             if let g = dict.gl[key], !g.isEmpty {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Chip(text: "華語", fill: T.fn, edge: T.fnEdge, ink: T.muted)
@@ -688,6 +689,43 @@ struct DictEntryBody: View {
             }
             let s = [part("人名", dict.raw.names[han]), part("姓", dict.raw.sur[han])].compactMap { $0 }.joined(separator: "　")
             if !s.isEmpty { Text(s).font(T.lat(14)).foregroundStyle(T.muted) }
+        }
+    }
+
+    /// 各地講法: with a place chosen, the other words that place uses for the same meaning (做伙 → 鹿港 also 鬥陣)
+    @ViewBuilder private var otherWordsRow: some View {
+        if place >= 0 {
+            let words: [(han: String, codes: String)] = {
+                var out: [(han: String, codes: String)] = []
+                for e in dict.raw.cmp where e.rows.contains(where: { $0.han == han }) {
+                    for r in e.rows where r.place == place && r.han != han && !out.contains(where: { $0.han == r.han }) {
+                        out.append((r.han, r.codes))
+                    }
+                }
+                return out
+            }()
+            if !words.isEmpty, place < dict.raw.places.count {
+                HStack(alignment: .top, spacing: 6) {
+                    Chip(text: String(dict.raw.places[place].prefix(2)) + "也講", fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
+                    FlowLayout(spacing: 6) {
+                        ForEach(Array(words.enumerated()), id: \.offset) { _, w in
+                            let k = dict.keyOf(Opt(han: w.han, codes: w.codes.split(separator: " ").map(String.init)))
+                            let label = HStack(spacing: 4) {
+                                Text(w.han).foregroundStyle(T.glyph)
+                                Text(dict.codes(w.codes, rom, place)).font(T.lat(13)).foregroundStyle(T.purpleInk)
+                            }
+                            .font(.subheadline)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule().fill(Color(hex: 0x4c3a5b).opacity(0.6)))
+                            if let k, dict.raw.defs.m[k] != nil {
+                                NavigationLink(value: DictKey(k: k)) { label }.buttonStyle(.plain)
+                            } else {
+                                label
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1294,13 +1332,13 @@ struct DictRow: View {
 // MARK: - example sentences with guessed readings marked
 
 extension Dict {
-    /// 羅馬字 of an example; readings guessed by rule (not stated by the dictionary) are blue
+    /// 羅馬字 of an example; readings guessed by rule (not stated by the dictionary) are red
     func sentenceText(_ tpl: String, _ sys: Int, place: Int, han: String, ink: Color = T.greenInk) -> AttributedString {
         var out = AttributedString()
         for p in sentencePieces(tpl, sys, place: place, han: han) {
             var a = AttributedString(p.text)
             if p.guessed {
-                a.swiftUI.foregroundColor = T.blueInk
+                a.swiftUI.foregroundColor = T.guessInk      // guessed readings in example sentences: red
             }
             out += a
         }
@@ -1311,24 +1349,24 @@ extension Dict {
 /// shown under examples when some readings in them are guessed
 struct GuessNote: View {
     var body: some View {
-        Text("藍色 = 推測的讀音（辭典沒有寫這個地方怎麼唸這個詞，照規則推出來的）")
+        Text("紅色 = 推測的讀音（辭典沒有寫這個地方怎麼唸這個詞，照規則推出來的）")
             .font(.caption2).foregroundStyle(T.muted)
     }
 }
 
-/// guessed parts in blue (the same blue as the 漢字 on the cards), the rest left to the view's colour
-func guessColored(_ pieces: [(text: String, guessed: Bool)], ink: Color? = nil) -> AttributedString {
+/// guessed parts in red, the rest left to the view's colour
+func guessColored(_ pieces: [(text: String, guessed: Bool)], ink: Color? = nil, guess: Color = T.guessInk) -> AttributedString {
     var out = AttributedString()
     for p in pieces {
         var a = AttributedString(p.text)
-        if p.guessed { a.swiftUI.foregroundColor = T.blueInk } else if let ink { a.swiftUI.foregroundColor = ink }
+        if p.guessed { a.swiftUI.foregroundColor = guess } else if let ink { a.swiftUI.foregroundColor = ink }
         out += a
     }
     return out
 }
 
 extension Dict {
-    /// a word's reading with guessed place readings in blue
+    /// a word's reading with guessed place readings in red
     func wordText(_ key: String, _ sys: Int, _ place: Int) -> AttributedString {
         guessColored(wordPieces(key, sys, place))
     }

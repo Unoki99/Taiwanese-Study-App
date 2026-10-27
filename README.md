@@ -79,13 +79,13 @@ iOS 26 上卡片、按鈕和選項都是 Liquid Glass，往右／往左拖卡片
 
 - 教育部辭典的「語音差異」只列了約 400 個常用字詞在各地的讀音。這些是辭典的資料。
 - 其他的詞（例如複合詞「白飯」「轉去」），是把單字的腔口讀音帶入用同一個讀音的詞推算的；例句裡的詞也是這樣換的。
-- 推算的讀音在 App 裡用**藍色**和「推測」標示。
+- 推算的讀音在 App 裡用**紅色**和「推測」標示。
 
 有些推算一定會錯，例如一個字在某些詞裡保留不同的唸法、文讀和白讀拼法相同、或是一個地方本身就有兩種講法。
 
 **如果你是這些地方的人，或很熟悉當地的腔口**，非常歡迎告訴我們哪裡唸得不對、當地實際怎麼講。請到 [Issues](../../issues) 開一則，寫上：地方、詞（漢字）、App 顯示的讀音、當地的讀音（台羅或皓羅都可以），有例句更好。每一則回饋都很珍貴，謝謝！
 
-*Local readings: many of the readings shown for a chosen place are **educated guesses** (shown in blue in the app), worked out from the ~400 words the MOE dictionary lists per place. If you are a native speaker of one of these varieties, corrections and comments are very welcome and much appreciated — please open an [issue](../../issues) with the place, the word, what the app shows and how it's said locally.*
+*Local readings: many of the readings shown for a chosen place are **educated guesses** (shown in red in the app), worked out from the ~400 words the MOE dictionary lists per place. If you are a native speaker of one of these varieties, corrections and comments are very welcome and much appreciated — please open an [issue](../../issues) with the place, the word, what the app shows and how it's said locally.*
 
 ## 進度與備份
 
@@ -110,7 +110,7 @@ iOS 26 上卡片、按鈕和選項都是 Liquid Glass，往右／往左拖卡片
 - **詞條、讀音、釋義、詞性、文白讀、例句、近反義詞、異用字、腔口差異、各地講法、人名姓氏讀音、分類、華語對照詞**：教育部《臺灣台語常用詞辭典》 — [sutian.moe.edu.tw](https://sutian.moe.edu.tw/)，授權：[創用CC 姓名標示-禁止改作 3.0 臺灣](https://creativecommons.org/licenses/by-nd/3.0/tw/)。
   - 本儲存庫**不包含**辭典的內容；`build-data.sh` 在使用者自己的電腦上從教育部的原始檔案產生 App 用的資料。
   - 釋義、例句照原文顯示。讀音依規則由台羅轉成皓羅、方音、白話字顯示。華語對照詞是從辭典的釋義和例句華語翻譯擷取出來的。
-  - **推算的內容**（不是教育部的資料）：辭典沒有寫的腔口讀音（依「/」並列讀音，以及單字的腔口讀音帶入同一個讀音的複合詞推算）、例句換成腔口讀音的結果。App 裡用**藍色**和「推測」標示。
+  - **推算的內容**（不是教育部的資料）：辭典沒有寫的腔口讀音（依「/」並列讀音，以及單字的腔口讀音帶入同一個讀音的複合詞推算）、例句換成腔口讀音的結果。App 裡用**紅色**和「推測」標示。
 - **讀音音檔、例句音檔**：教育部《臺灣台語常用詞辭典》，授權同上，原始音檔未經修改，由方方網站（unoki99.github.io/fangfang）提供下載。
 - **音節編碼**：YuRen-tw（Yu-Ren Pan）《rime-taigi-tps》的拼音系統，經作者同意使用 — [github.com/YuRen-tw/rime-taigi-tps](https://github.com/YuRen-tw/rime-taigi-tps)
 - **字頻**：Rime《八股文》 essay.txt（LGPL-3.0），`build-data.sh` 執行時下載 — [github.com/rime/rime-essay](https://github.com/rime/rime-essay)

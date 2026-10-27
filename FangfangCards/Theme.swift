@@ -31,6 +31,8 @@ enum T {
     static let rustEdge = Color(hex: 0x8b4a2d)
     static let rustInk = Color(hex: 0xf3c9b2)
     static let pink = Color(hex: 0x5e3a4f)
+    /// guessed (推測) readings
+    static let guessInk = Color(hex: 0xff7a6e)
     static let pinkEdge = Color(hex: 0xa04a78)
     static let pinkInk = Color(hex: 0xf8cbe2)
 

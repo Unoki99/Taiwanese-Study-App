@@ -143,29 +143,61 @@ explicit = {(e["i"], k) for e in E for k in e.get("d", {})}     # readings the f
 for e in E:
     if e.get("d"): e["dx"] = sorted(e["d"], key=int)          # remembered, so the apps can tell stated from guessed
 
-# dialects: 2. enn/inn, e/i, inn/i, ueh/uih between the "/" readings
+# 詞彙比較 also tells how a word is said in each place, sometimes in two ways (粗紙 in 高雄:
+# tshoo-tsuá and thoo-tsuá). Where its word is a dictionary entry (same characters, same number of
+# syllables, closest reading), those readings are stated local readings too.
+by_han = collections.defaultdict(list)
 for e in E:
-    if "r" not in e or "a" not in e: continue
-    for alt, label in e["a"]:
-        if label: continue
-        st = style(e["r"], alt)
-        if not st: continue
-        for i in range(len(PLACES)):
-            if str(i) in e.get("d", {}): continue          # the file's own reading wins
-            if (st == "G1") == (i in G1):
-                e.setdefault("d", {})[str(i)] = alt
+    if "r" in e: by_han[e["h"]].append(e)
+said = collections.OrderedDict()                     # (han, place index) -> [readings]
+for r in S["詞彙比較"][1:]:
+    if len(r) < 5 or r[2] not in PLACES or not r[4].strip(): continue
+    k = (r[3], str(PLACES.index(r[2])))
+    rs = rstr(reading(r[4]))
+    if rs not in said.setdefault(k, []): said[k].append(rs)
+# which dictionary entry a 詞彙比較 word is: same characters and number of syllables; if several, the one
+# closest to the readings given for all the places together (做伙: 宜蘭 tsò-hué is exactly the main reading)
+all_forms = collections.defaultdict(list)
+for (han, pl), forms in said.items(): all_forms[han] += [codes_only(f.split()) for f in forms]
+def entry_for(han, n):
+    cands = [e for e in by_han.get(han, []) if len(codes_only(e["r"].split())) == n]
+    if len(cands) <= 1: return cands[0] if cands else None
+    def overlap(e):
+        m = codes_only(e["r"].split())
+        return sum(sum(a == b for a, b in zip(m, f)) for f in all_forms[han] if len(f) == n)
+    best = max(overlap(e) for e in cands)
+    top = [e for e in cands if overlap(e) == best]
+    return top[0] if len(top) == 1 else None
+vocab_set = vocab_extra = 0
+for (han, pl), forms in said.items():
+    fc = [codes_only(f.split()) for f in forms]
+    e = entry_for(han, len(fc[0]))
+    if e is None: continue
+    main = codes_only(e["r"].split())
+    stated = []
+    if (e["i"], pl) in explicit:                     # 語音差異 first, then what 詞彙比較 adds
+        stated = [e["d"][pl]] + e.get("dd", {}).get(pl, [])
+    elif "dd" in e and pl in e["dd"]:
+        stated = [e["r"]] + e["dd"][pl]
+    for f in forms:
+        if codes_only(f.split()) not in [codes_only(x.split()) for x in stated]: stated.append(f)
+    if not stated: continue
+    if (e["i"], pl) not in explicit:
+        if codes_only(stated[0].split()) == main: e.get("d", {}).pop(pl, None)   # the place says it like 通行
+        else: e.setdefault("d", {})[pl] = stated[0]
+        e.setdefault("dx", [])
+        if pl not in e["dx"]: e["dx"].append(pl); vocab_set += 1
+    extra = [x for x in stated[1:] if codes_only(x.split()) != codes_only(stated[0].split())]
+    if extra:
+        e.setdefault("dd", {})[pl] = extra; vocab_extra += 1
+print("詞彙比較 readings used:", vocab_set, "places with a second reading:", vocab_extra)
+explicit |= {(e["i"], p) for e in E for p in e.get("dx", [])}
 
-# dialects: 3. a character's local reading (as MOE states it in 語音差異) carries into compounds,
-#    but only where the compound uses that same reading of the character (same 台羅 spelling),
-#    so 十全 tsa̍p-tsn̂g follows 全 tsn̂g, while 十全 si̍p-tsuân (the literary reading) stays as it is
+# dialects: 2. a character's local reading (as MOE states it in 語音差異) carries into words, but only where
+#    the word uses that same reading of the character (same 台羅 spelling): 十全 tsa̍p-tsn̂g follows 全 tsn̂g,
+#    while 十全 si̍p-tsuân (the literary reading) stays as it is. A character's own "/" spellings lead to the
+#    same local reading (過 kuè/kè → 鹿港 kèr).
 R_ADD = {"ø": "ɵ", "e": "ə", "i": "ɨ"}
-def only_r(main, new):
-    pm, pn = parse(main), parse(new)
-    if not pm or not pn: return False
-    if (pm[0], pm[1], pm[3], pm[4]) != (pn[0], pn[1], pn[3], pn[4]): return False
-    a, b = pm[2], pn[2]
-    return len(a) == len(b) and sum(x != y for x, y in zip(a, b)) == 1 and \
-        all(x == y or R_ADD.get(x) == y for x, y in zip(a, b))
 rrule = collections.defaultdict(dict)            # (character, code) -> {place: code}
 for e in E:
     if len(e["h"]) != 1 or "r" not in e or "d" not in e: continue
@@ -174,31 +206,84 @@ for e in E:
     for pl, r in e["d"].items():
         if (e["i"], pl) not in explicit: continue
         n = r.split()
-        if len(n) == 1 and n[0] != m[0]:          # any local difference of this reading (matched by reading, so
-                                                 # a literary reading with its own spelling is never touched)
+        if len(n) == 1 and n[0] != m[0]:
             rrule[(e["h"], m[0])][pl] = n[0]
-carried = 0
+            for alt, label in e.get("a", []):
+                al = alt.split()
+                if label == "" and len(al) == 1 and al[0] != n[0] and (e["h"], al[0]) not in rrule:
+                    rrule[(e["h"], al[0])][pl] = n[0]
+
+# words (2+ characters) whose local reading MOE gives: (characters, codes) -> {place: [codes]}
+wrule = collections.defaultdict(dict)
 for e in E:
     if "r" not in e or len(e["h"]) < 2: continue
+    m = codes_only(e["r"].split())
+    if len(m) != len(e["h"]): continue
+    for pl in e.get("dx", []):
+        if (e["i"], pl) not in explicit: continue
+        n = codes_only(e.get("d", {}).get(pl, e["r"]).split())
+        if len(n) == len(m): wrule[(e["h"], " ".join(m))][pl] = n
+
+# dialects: 3. for each place without MOE's own reading of the word, syllable by syllable:
+#    a. the local reading of a word inside it that MOE gives for the place, else the character's local
+#       reading (rule 2), else
+#    b. the syllable from MOE's "/" form for that place: the form that agrees with the local readings of
+#       the other syllables (按呢生 án-ne-senn / án-ní-sinn: 生 → sinn, so 呢 → ní), or else the
+#       enn/inn, e/i, inn/i, ueh/uih pair rule between the "/" forms
+#       (宜蘭, 臺南, 高雄, 臺中 enn/e/inn/ueh; the other places inn/i/i/uih), else
+#    c. the 通行 syllable
+carried = from_slash = 0
+for e in E:
+    if "r" not in e: continue
     toks = e["r"].split()
     code_pos = [i for i, t in enumerate(toks) if parse(t.lstrip("^"))]
     chars = list(e["h"])
-    if len(code_pos) != len(chars): continue
+    main = [toks[i].lstrip("^") for i in code_pos]
+    slash = [a for a, label in e.get("a", []) if label == ""]
+    slash = [a for a in slash if len(codes_only(a.split())) == len(main)]
     for pl in map(str, range(len(PLACES))):
         if (e["i"], pl) in explicit: continue
-        base = e.get("d", {}).get(pl, e["r"]).split()
-        if len(base) != len(toks): continue
-        changed = False
-        for ch, i in zip(chars, code_pos):
-            c = toks[i].lstrip("^")
-            new = rrule.get((ch, c), {}).get(pl)
-            if new:
-                base[i] = ("^" if toks[i].startswith("^") else "") + new
-                changed = True
-        if changed:
-            e.setdefault("d", {})[pl] = " ".join(base)
-            carried += 1
-print("rules", len(rrule), "dialect readings carried into compounds", carried)
+        local = {}                                   # syllable position -> local reading (rule a)
+        if len(main) == len(chars) and len(chars) > 1:
+            # a word inside this word that MOE gives for the place (鬥做伙 contains 做伙: 鹿港 tsuè-hér),
+            # longest first
+            for L in range(len(chars) - 1, 1, -1):
+                for st in range(0, len(chars) - L + 1):
+                    if any(n in local for n in range(st, st + L)): continue
+                    w = wrule.get(("".join(chars[st:st + L]), " ".join(main[st:st + L])), {}).get(pl)
+                    if w and len(w) == L:
+                        for j in range(L): local[st + j] = w[j]
+            for n, (ch, c) in enumerate(zip(chars, main)):
+                if n in local: continue
+                new = rrule.get((ch, c), {}).get(pl)
+                if new: local[n] = new
+        # which "/" form fills the other syllables (rule b)
+        form = None
+        if slash:
+            def hits(f):
+                fc = codes_only(f.split())
+                return sum(1 for n, v in local.items() if fc[n] == v or rrule.get((chars[n], fc[n]), {}).get(pl) == v) \
+                    if len(chars) == len(fc) else 0
+            best = max(slash, key=hits)
+            if local and hits(best) > 0 and any(codes_only(best.split())[n] != main[n] for n in range(len(main)) if n not in local):
+                form = best
+            if form is None:
+                for a in slash:
+                    st = style(e["r"], a)
+                    if st and (st == "G1") == (int(pl) in G1): form = a; break
+        base = (form or e["r"]).split()
+        fpos = [i for i, t in enumerate(base) if parse(t.lstrip("^"))]
+        if len(fpos) == len(chars) and len(chars) > 1:
+            for n, (ch, i) in enumerate(zip(chars, fpos)):
+                c = base[i].lstrip("^")
+                new = local.get(n) if c == main[n] else rrule.get((ch, c), {}).get(pl)
+                if new: base[i] = ("^" if base[i].startswith("^") else "") + new
+        if codes_only(base) == main: continue
+        e.setdefault("d", {})[pl] = " ".join(base)
+        if form: from_slash += 1
+        else: carried += 1
+
+print("rules", len(rrule), "local readings carried into words", carried, "using a / form", from_slash)
 
 # senses, examples
 sense_entry, sense_ord = {}, {}
@@ -282,48 +367,6 @@ for r in S["詞彙比較"][1:]:
     cmp.setdefault(zh, [])
     if item not in cmp[zh]: cmp[zh].append(item)
 
-# 詞彙比較 also tells how a word is said in each place, sometimes in two ways (粗紙 in 高雄:
-# tshoo-tsuá and thoo-tsuá). Where its word is a dictionary entry (same characters, same number of
-# syllables, closest reading), those readings are stated local readings too.
-by_han = collections.defaultdict(list)
-for e in E:
-    if "r" in e: by_han[e["h"]].append(e)
-said = collections.OrderedDict()                     # (han, place index) -> [readings]
-for r in S["詞彙比較"][1:]:
-    if len(r) < 5 or r[2] not in PLACES or not r[4].strip(): continue
-    k = (r[3], str(PLACES.index(r[2])))
-    rs = rstr(reading(r[4]))
-    if rs not in said.setdefault(k, []): said[k].append(rs)
-vocab_set = vocab_extra = 0
-for (han, pl), forms in said.items():
-    fc = [codes_only(f.split()) for f in forms]
-    cands = [e for e in by_han.get(han, []) if len(codes_only(e["r"].split())) == len(fc[0])]
-    if not cands: continue
-    def overlap(e):
-        m = codes_only(e["r"].split())
-        return max(sum(a == b for a, b in zip(m, f)) for f in fc)
-    best = max(overlap(e) for e in cands)
-    top = [e for e in cands if overlap(e) == best]
-    if len(top) != 1 or best == 0: continue
-    e = top[0]
-    main = codes_only(e["r"].split())
-    stated = []
-    if (e["i"], pl) in explicit:                     # 語音差異 first, then what 詞彙比較 adds
-        stated = [e["d"][pl]] + e.get("dd", {}).get(pl, [])
-    elif "dd" in e and pl in e["dd"]:
-        stated = [e["r"]] + e["dd"][pl]
-    for f in forms:
-        if codes_only(f.split()) not in [codes_only(x.split()) for x in stated]: stated.append(f)
-    if not stated: continue
-    if (e["i"], pl) not in explicit:
-        if codes_only(stated[0].split()) == main: e.get("d", {}).pop(pl, None)   # the place says it like 通行
-        else: e.setdefault("d", {})[pl] = stated[0]
-        e.setdefault("dx", [])
-        if pl not in e["dx"]: e["dx"].append(pl); vocab_set += 1
-    extra = [x for x in stated[1:] if codes_only(x.split()) != codes_only(stated[0].split())]
-    if extra:
-        e.setdefault("dd", {})[pl] = extra; vocab_extra += 1
-print("詞彙比較 readings used:", vocab_set, "places with a second reading:", vocab_extra)
 
 # 名 / 姓: readings of characters in names
 def name_sheet(sheet):

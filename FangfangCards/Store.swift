@@ -227,7 +227,7 @@ final class Store: ObservableObject {
         return d.alsoSaid(card.k, place).map { (d.codes($0, r, place), d.codes($0, 3, place)) }
     }
 
-    /// a card's reading, with syllables guessed for the place in blue
+    /// a card's reading, with syllables guessed for the place in red
     func cardRom(_ card: Card, _ rom: Int, _ place: Int) -> AttributedString {
         let r = min(max(rom, 0), 2)
         if place >= 0, let d = dict, !d.guessedSyllables(card.k, place).isEmpty { return d.wordText(card.k, r, place) }
@@ -239,7 +239,7 @@ final class Store: ObservableObject {
     }
 
     /// a card's example in 羅馬字, in the chosen place's readings when the dictionary is loaded
-    /// (guessed readings are blue)
+    /// (guessed readings are red)
     func exampleRom(_ card: Card, _ x: Example, _ rom: Int, _ place: Int) -> AttributedString {
         let r = min(max(rom, 0), 2)
         guard place >= 0, let d = dict, let e = dictExample(d, card, x) else { return AttributedString(x.r[r]) }
@@ -251,7 +251,7 @@ final class Store: ObservableObject {
         let r = min(max(rom, 0), 2)
         if place >= 0, let d = dict, let e = dictExample(d, card, x),
            let ps = d.blankSentencePieces(e[1], han: e[0], word: Dict.codesOf(card.k).split(separator: " ").map(String.init), r, place: place) {
-            return guessColored(ps)
+            return guessColored(ps, guess: T.guessInk)
         }
         return x.br.map { AttributedString($0[r]) }
     }
