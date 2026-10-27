@@ -73,6 +73,7 @@ struct DictTabs: View {
         VStack(spacing: 0) {
             Picker("", selection: $tab) {
                 Text("查詞").tag(0)
+                Text("各地讀音").tag(3)
                 Text("分類").tag(1)
                 Text("收藏").tag(2)
             }
@@ -82,6 +83,7 @@ struct DictTabs: View {
                 switch tab {
                 case 1: CategoryPane(dict: dict)
                 case 2: SavedPane(dict: dict)
+                case 3: PronunciationPane(dict: dict)
                 default: LookupPane(dict: dict)
                 }
             }
@@ -577,7 +579,6 @@ struct DictEntryBody: View {
             variantsRow
             categoriesRow
             otherWordsRow
-            placesTable
             if let g = dict.gl[key], !g.isEmpty {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Chip(text: "華語", fill: T.fn, edge: T.fnEdge, ink: T.muted)
@@ -693,56 +694,7 @@ struct DictEntryBody: View {
         }
     }
 
-    /// 各地讀音: how the word is said in each of the 10 places (places that say it the same way share a row).
-    /// Readings MOE gives are in the usual colours; guessed ones are red.
-    @ViewBuilder private var placesTable: some View {
-        let main = Dict.codesOf(key)
-        let groups: [(codes: String, guessed: Bool, places: [Int])] = {
-            var out: [(codes: String, guessed: Bool, places: [Int])] = []
-            for p in dict.raw.places.indices {
-                let c = dict.codesFor(key, p)
-                let g = !dict.guessedSyllables(key, p).isEmpty
-                if let i = out.firstIndex(where: { $0.codes == c && $0.guessed == g }) { out[i].places.append(p) }
-                else { out.append((c, g, [p])) }
-            }
-            return out
-        }()
-        if groups.contains(where: { $0.codes != main }) || dict.raw.dia2?[key] != nil {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("各地讀音").font(.caption.weight(.bold)).foregroundStyle(T.muted)
-                ForEach(Array(groups.enumerated()), id: \.offset) { _, g in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(g.places.map { String(dict.raw.places[$0].prefix(2)) }.joined(separator: "、") + (g.codes == main ? "（同通行）" : ""))
-                            .font(.caption).foregroundStyle(g.places.contains(place) ? T.oliveInk : T.muted)
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(dict.wordText(key, rom, g.places[0])).font(T.lat(17)).foregroundStyle(T.greenInk)
-                            Text(dict.wordText(key, 3, g.places[0])).font(.subheadline).foregroundStyle(T.purpleInk)
-                            if g.guessed { Chip(text: "推測", fill: T.fn, edge: T.fnEdge, ink: T.muted) }
-                        }
-                        // the place also says it another way
-                        let also = Array(Set(g.places.flatMap { dict.alsoSaid(key, $0) })).sorted()
-                        ForEach(also, id: \.self) { x in
-                            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Chip(text: "也講", fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
-                                Text(dict.codes(x, rom, g.places[0])).font(T.lat(15)).foregroundStyle(T.greenInk)
-                                Text(dict.codes(x, 3, g.places[0])).font(.footnote).foregroundStyle(T.purpleInk)
-                                let who = g.places.filter { dict.alsoSaid(key, $0).contains(x) }
-                                if who.count < g.places.count {
-                                    Text(who.map { String(dict.raw.places[$0].prefix(2)) }.joined(separator: "、"))
-                                        .font(.caption2).foregroundStyle(T.muted)
-                                }
-                            }
-                        }
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(T.fn.opacity(0.55)))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(g.places.contains(place) ? Color(hex: 0x7b3c9b) : .clear, lineWidth: 1.5))
-                }
-                Text("紅色／推測 = 辭典沒有寫這個地方的讀音，是照規則推出來的。").font(.caption2).foregroundStyle(T.muted)
-            }
-        }
-    }
+    private var placesTable: some View { PlacesTable(dict: dict, key: key) }
 
     /// 各地講法: with a place chosen, the other words that place uses for the same meaning (做伙 → 鹿港 also 鬥陣)
     @ViewBuilder private var otherWordsRow: some View {
@@ -1421,5 +1373,137 @@ extension Dict {
     /// a word's reading with guessed place readings in red
     func wordText(_ key: String, _ sys: Int, _ place: Int) -> AttributedString {
         guessColored(wordPieces(key, sys, place))
+    }
+}
+
+/// 各地讀音: how a word is said in each of the 10 places (places that say it the same way share a box).
+/// Readings MOE gives are in the usual colours; guessed ones are red with 推測.
+struct PlacesTable: View {
+    let dict: Dict
+    let key: String
+    /// show even when every place says it like 通行
+    var always = false
+    @AppStorage("rom") private var rom = 0
+    @AppStorage("place") private var place = -1
+
+    var body: some View {
+        let main = Dict.codesOf(key)
+        let groups: [(codes: String, guessed: Bool, places: [Int])] = {
+            var out: [(codes: String, guessed: Bool, places: [Int])] = []
+            for p in dict.raw.places.indices {
+                let c = dict.codesFor(key, p)
+                let g = !dict.guessedSyllables(key, p).isEmpty
+                if let i = out.firstIndex(where: { $0.codes == c && $0.guessed == g }) { out[i].places.append(p) }
+                else { out.append((c, g, [p])) }
+            }
+            return out
+        }()
+        if always || groups.contains(where: { $0.codes != main }) || dict.raw.dia2?[key] != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("各地讀音").font(.caption.weight(.bold)).foregroundStyle(T.muted)
+                ForEach(Array(groups.enumerated()), id: \.offset) { _, g in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(g.places.map { String(dict.raw.places[$0].prefix(2)) }.joined(separator: "、") + (g.codes == main ? "（同通行）" : ""))
+                            .font(.caption).foregroundStyle(g.places.contains(place) ? T.oliveInk : T.muted)
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(dict.wordText(key, rom, g.places[0])).font(T.lat(17)).foregroundStyle(T.greenInk)
+                            Text(dict.wordText(key, 3, g.places[0])).font(.subheadline).foregroundStyle(T.purpleInk)
+                            if g.guessed { Chip(text: "推測", fill: T.fn, edge: T.fnEdge, ink: T.muted) }
+                        }
+                        // the place also says it another way
+                        let also = Array(Set(g.places.flatMap { dict.alsoSaid(key, $0) })).sorted()
+                        ForEach(also, id: \.self) { x in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Chip(text: "也講", fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
+                                Text(dict.codes(x, rom, g.places[0])).font(T.lat(15)).foregroundStyle(T.greenInk)
+                                Text(dict.codes(x, 3, g.places[0])).font(.footnote).foregroundStyle(T.purpleInk)
+                                let who = g.places.filter { dict.alsoSaid(key, $0).contains(x) }
+                                if who.count < g.places.count {
+                                    Text(who.map { String(dict.raw.places[$0].prefix(2)) }.joined(separator: "、"))
+                                        .font(.caption2).foregroundStyle(T.muted)
+                                }
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(T.fn.opacity(0.55)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(g.places.contains(place) ? Color(hex: 0x7b3c9b) : .clear, lineWidth: 1.5))
+                }
+                Text("紅色／推測 = 辭典沒有寫這個地方的讀音，是照規則推出來的。").font(.caption2).foregroundStyle(T.muted)
+            }
+        }
+    }
+}
+
+// MARK: - 各地讀音 (search a word, see it in every place)
+
+struct PronunciationPane: View {
+    let dict: Dict
+    @AppStorage("pronQuery") private var query = ""
+    @State private var keys: [String] = []
+    @State private var task: Task<Void, Never>?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                TextField("台語漢字、羅馬字、方音或華語，例如：做伙、四界、tsiah", text: $query)
+                    .font(.system(size: 18))
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 14).fill(T.fn.opacity(0.7)))
+                if query.isEmpty {
+                    Text("查一個詞，看它在鹿港、三峽、臺北、宜蘭、臺南、高雄、金門、馬公、新竹、臺中各地的讀音。紅色／推測 = 辭典沒有寫，照規則推出來的。")
+                        .font(.footnote).foregroundStyle(T.muted)
+                } else if keys.isEmpty {
+                    Text("找不到「\(query)」。").foregroundStyle(T.muted)
+                }
+                ForEach(keys, id: \.self) { k in
+                    // the whole block opens the word's dictionary entry
+                    NavigationLink(value: DictKey(k: k)) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(Dict.hanOf(k)).font(.system(size: 24, weight: .semibold)).foregroundStyle(T.glyph)
+                                Text("通行").font(.caption).foregroundStyle(T.muted)
+                                Text(dict.word(k, 0, -1)).font(T.lat(16)).foregroundStyle(T.greenInk)
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(T.muted)
+                            }
+                            PlacesTable(dict: dict, key: k, always: true)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(T.fn.opacity(0.35)))
+                        .contentShape(RoundedRectangle(cornerRadius: 16))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding()
+            .frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .onAppear { search() }
+        .onChange(of: query) { search() }
+    }
+
+    private func search() {
+        task?.cancel()
+        let q = query, d = dict
+        task = Task {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            let found: [String] = await Task.detached(priority: .userInitiated) {
+                let r = Lookup.run(d, q)
+                var out: [String] = []
+                for k in r.taigi + r.exact + r.pattern + r.contains + r.patternZh + r.gloss
+                where !out.contains(k) && d.raw.defs.m[k] != nil { out.append(k) }
+                return Array(out.prefix(12))
+            }.value
+            guard !Task.isCancelled else { return }
+            keys = found
+        }
     }
 }
