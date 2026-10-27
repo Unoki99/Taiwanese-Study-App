@@ -577,6 +577,7 @@ struct DictEntryBody: View {
             variantsRow
             categoriesRow
             otherWordsRow
+            placesTable
             if let g = dict.gl[key], !g.isEmpty {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Chip(text: "華語", fill: T.fn, edge: T.fnEdge, ink: T.muted)
@@ -689,6 +690,57 @@ struct DictEntryBody: View {
             }
             let s = [part("人名", dict.raw.names[han]), part("姓", dict.raw.sur[han])].compactMap { $0 }.joined(separator: "　")
             if !s.isEmpty { Text(s).font(T.lat(14)).foregroundStyle(T.muted) }
+        }
+    }
+
+    /// 各地讀音: how the word is said in each of the 10 places (places that say it the same way share a row).
+    /// Readings MOE gives are in the usual colours; guessed ones are red.
+    @ViewBuilder private var placesTable: some View {
+        let main = Dict.codesOf(key)
+        let groups: [(codes: String, guessed: Bool, places: [Int])] = {
+            var out: [(codes: String, guessed: Bool, places: [Int])] = []
+            for p in dict.raw.places.indices {
+                let c = dict.codesFor(key, p)
+                let g = !dict.guessedSyllables(key, p).isEmpty
+                if let i = out.firstIndex(where: { $0.codes == c && $0.guessed == g }) { out[i].places.append(p) }
+                else { out.append((c, g, [p])) }
+            }
+            return out
+        }()
+        if groups.contains(where: { $0.codes != main }) || dict.raw.dia2?[key] != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("各地讀音").font(.caption.weight(.bold)).foregroundStyle(T.muted)
+                ForEach(Array(groups.enumerated()), id: \.offset) { _, g in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(g.places.map { String(dict.raw.places[$0].prefix(2)) }.joined(separator: "、") + (g.codes == main ? "（同通行）" : ""))
+                            .font(.caption).foregroundStyle(g.places.contains(place) ? T.oliveInk : T.muted)
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(dict.wordText(key, rom, g.places[0])).font(T.lat(17)).foregroundStyle(T.greenInk)
+                            Text(dict.wordText(key, 3, g.places[0])).font(.subheadline).foregroundStyle(T.purpleInk)
+                            if g.guessed { Chip(text: "推測", fill: T.fn, edge: T.fnEdge, ink: T.muted) }
+                        }
+                        // the place also says it another way
+                        let also = Array(Set(g.places.flatMap { dict.alsoSaid(key, $0) })).sorted()
+                        ForEach(also, id: \.self) { x in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Chip(text: "也講", fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
+                                Text(dict.codes(x, rom, g.places[0])).font(T.lat(15)).foregroundStyle(T.greenInk)
+                                Text(dict.codes(x, 3, g.places[0])).font(.footnote).foregroundStyle(T.purpleInk)
+                                let who = g.places.filter { dict.alsoSaid(key, $0).contains(x) }
+                                if who.count < g.places.count {
+                                    Text(who.map { String(dict.raw.places[$0].prefix(2)) }.joined(separator: "、"))
+                                        .font(.caption2).foregroundStyle(T.muted)
+                                }
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(T.fn.opacity(0.55)))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(g.places.contains(place) ? Color(hex: 0x7b3c9b) : .clear, lineWidth: 1.5))
+                }
+                Text("紅色／推測 = 辭典沒有寫這個地方的讀音，是照規則推出來的。").font(.caption2).foregroundStyle(T.muted)
+            }
         }
     }
 

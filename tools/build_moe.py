@@ -206,6 +206,8 @@ for e in E:
     for pl, r in e["d"].items():
         if (e["i"], pl) not in explicit: continue
         n = r.split()
+        also = [codes_only(x.split()) for x in e.get("dd", {}).get(pl, [])]
+        if [m[0]] in also: continue                # the place also says it the 通行 way (四 sù / sì): keep that
         if len(n) == 1 and n[0] != m[0]:
             rrule[(e["h"], m[0])][pl] = n[0]
             for alt, label in e.get("a", []):
@@ -222,6 +224,7 @@ for e in E:
     for pl in e.get("dx", []):
         if (e["i"], pl) not in explicit: continue
         n = codes_only(e.get("d", {}).get(pl, e["r"]).split())
+        if m in [codes_only(x.split()) for x in e.get("dd", {}).get(pl, [])]: continue   # also said the 通行 way
         if len(n) == len(m): wrule[(e["h"], " ".join(m))][pl] = n
 
 # dialects: 3. for each place without MOE's own reading of the word, syllable by syllable:
@@ -262,7 +265,8 @@ for e in E:
         if slash:
             def hits(f):
                 fc = codes_only(f.split())
-                return sum(1 for n, v in local.items() if fc[n] == v or rrule.get((chars[n], fc[n]), {}).get(pl) == v) \
+                return sum(1 for n, v in local.items()
+                           if fc[n] != main[n] and (fc[n] == v or rrule.get((chars[n], fc[n]), {}).get(pl) == v)) \
                     if len(chars) == len(fc) else 0
             best = max(slash, key=hits)
             if local and hits(best) > 0 and any(codes_only(best.split())[n] != main[n] for n in range(len(main)) if n not in local):
