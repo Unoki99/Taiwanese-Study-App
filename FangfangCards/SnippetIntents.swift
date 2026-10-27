@@ -101,10 +101,12 @@ struct LookUpSnippetView: View {
             }
             ForEach(rows) { row in
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .center, spacing: 8) {
                         Text(row.han).font(.title3.weight(.semibold))
                         Text(row.rom).font(T.lat(16)).foregroundStyle(.green)
+                            .pill(.green)
                         Text(row.zy).font(.footnote).foregroundStyle(.purple)
+                            .pill(.purple)
                         Spacer(minLength: 0)
                     }
                     if !row.gloss.isEmpty {
@@ -113,8 +115,8 @@ struct LookUpSnippetView: View {
                     buttons(row)
                 }
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 14).fill(Color.green.opacity(0.08)))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.green.opacity(0.55), lineWidth: 1.5))
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color.gray.opacity(0.10)))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.gray.opacity(0.45), lineWidth: 1.5))
             }
             if more {
                 Button(intent: OpenLookUpIntent(word: word)) {
@@ -232,5 +234,14 @@ struct OpenLookUpIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         Router.shared.lookUp(word)
         return .result()
+    }
+}
+
+extension View {
+    /// a reading in a rounded box of its own colour, matching the card's buttons
+    func pill(_ c: Color) -> some View {
+        padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Capsule().fill(c.opacity(0.14)))
+            .overlay(Capsule().stroke(c.opacity(0.55), lineWidth: 1))
     }
 }

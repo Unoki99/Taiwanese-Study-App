@@ -383,6 +383,62 @@ final class Dict: @unchecked Sendable {
         sentencePieces(tpl, sys, place: place, han: han).map { $0.text }.joined()
     }
 
+    /// an example sentence's 漢字 split into words: (text, dictionary key or nil). The template's dashes tell
+    /// which syllables make one word; a word that isn't in the dictionary is split into the longest words it has.
+    func exampleWords(_ han: String, _ tpl: String) -> [(text: String, key: String?)] {
+        let codes = tpl.matches(of: #/\{\^?([^}]*)\}/#).map { String($0.1) }
+        var seps: [Substring] = []
+        var prev = tpl.startIndex
+        for m in tpl.matches(of: #/\{[^}]*\}/#) { seps.append(tpl[prev..<m.range.lowerBound]); prev = m.range.upperBound }
+        let chars = Array(han)
+        let hanIdx = chars.indices.filter { chars[$0].unicodeScalars.first.map { ConvertEngine.isHan($0.value) } ?? false }
+        guard !codes.isEmpty, codes.count == hanIdx.count else { return [(han, nil)] }
+        // syllable n -> key of the word it belongs to
+        var keyOf = [String?](repeating: nil, count: codes.count)
+        var groups: [[Int]] = []
+        for n in codes.indices {
+            if n > 0, seps[n] == "-" || seps[n] == "--" { groups[groups.count - 1].append(n) } else { groups.append([n]) }
+        }
+        func key(_ seg: ArraySlice<Int>) -> String {
+            seg.map { String(chars[hanIdx[$0]]) }.joined() + "\t" + seg.map { codes[$0] }.joined(separator: " ")
+        }
+        func found(_ k: String) -> String? { baseKeys.contains(k) ? k : altParent[k] }
+        for g in groups {
+            var a = 0
+            while a < g.count {
+                var step = 1
+                for L in stride(from: g.count - a, through: 1, by: -1) {
+                    if let k = found(key(g[a..<a + L])) {
+                        for n in g[a..<a + L] { keyOf[n] = k }
+                        step = L; break
+                    }
+                }
+                a += step
+            }
+        }
+        // pieces over the whole 漢字 sentence (punctuation stays plain)
+        var out: [(text: String, key: String?)] = []
+        var n = 0, lastGroup = -1
+        var groupOf = [Int](repeating: 0, count: codes.count)
+        for (gi, g) in groups.enumerated() { for x in g { groupOf[x] = gi } }
+        for (i, ch) in chars.enumerated() {
+            if n < hanIdx.count, hanIdx[n] == i {
+                let k = keyOf[n]
+                if let last = out.last, last.key == k, k != nil, groupOf[n] == lastGroup {
+                    out[out.count - 1].text.append(ch)
+                } else {
+                    out.append((String(ch), k))
+                }
+                lastGroup = groupOf[n]
+                n += 1
+            } else {
+                if let last = out.last, last.key == nil { out[out.count - 1].text.append(ch) } else { out.append((String(ch), nil)) }
+                lastGroup = -1
+            }
+        }
+        return out
+    }
+
     /// the template with syllables lower..<upper (by position) replaced by ＿＿ (for 例句填空)
     static func blanked(_ tpl: String, _ r: Range<Int>) -> String {
         var spans: [Range<String.Index>] = []
@@ -462,25 +518,23 @@ final class Dict: @unchecked Sendable {
             }
         }
         for g in groups {
-            // the whole word, then its parts around a light-tone --, then the longest known words from the left
-            var segs: [ArraySlice<Int>] = [g[...]]
+            // the whole word; else each part around a light-tone -- (入選--無 → 入選, 無), each as a word
+            // or as the longest known words inside it
+            if baseKeys.contains(key(g[...])) { use(g[...], key(g[...]), whole: true); continue }
             var parts: [ArraySlice<Int>] = [], from = 0
             for (j, n) in g.enumerated() where j > 0 && tks[n].sep == "--" { parts.append(g[from..<j]); from = j }
-            if !parts.isEmpty { parts.append(g[from...]); segs += parts }
-            var done = false
-            for seg in segs {
-                let k = key(seg)
-                if baseKeys.contains(k) { use(seg, k, whole: true); done = true; break }
-            }
-            if done { continue }
-            var a = 0
-            while a < g.count {
-                var step = 1
-                for L in stride(from: g.count - a, through: 1, by: -1) {
-                    let seg = g[a..<a + L], k = key(seg)
-                    if baseKeys.contains(k) { use(seg, k, whole: false); step = L; break }
+            parts.append(g[from...])
+            for part in parts {
+                if baseKeys.contains(key(part)) { use(part, key(part), whole: true); continue }
+                var a = part.startIndex
+                while a < part.endIndex {
+                    var step = 1
+                    for L in stride(from: part.endIndex - a, through: 1, by: -1) {
+                        let seg = part[a..<a + L], k = key(seg)
+                        if baseKeys.contains(k) { use(seg, k, whole: false); step = L; break }
+                    }
+                    a += step
                 }
-                a += step
             }
         }
         if rep.isEmpty { return tpl }

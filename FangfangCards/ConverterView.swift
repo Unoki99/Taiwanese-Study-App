@@ -549,6 +549,7 @@ struct DictEntryBody: View {
     @AppStorage("place") private var place = -1
 
     private var han: String { Dict.hanOf(key) }
+    @State private var tapped: DictKey?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -588,6 +589,25 @@ struct DictEntryBody: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .navigationDestination(item: $tapped) { DictEntryView(dict: dict, key: $0.k) }
+    }
+
+    /// the example's 漢字 with each dictionary word tappable (opens its entry)
+    private func exampleHan(_ han: String, _ tpl: String) -> AttributedString {
+        var out = AttributedString()
+        for p in dict.exampleWords(han, tpl) {
+            var a = AttributedString(p.text)
+            if let k = p.key, k != key, let enc = k.addingPercentEncoding(withAllowedCharacters: .alphanumerics),
+               let url = URL(string: "ffword://w/" + enc) {
+                a.link = url
+                a.swiftUI.foregroundColor = T.blueInk
+                a.swiftUI.underlineStyle = Text.LineStyle(pattern: .dot, color: T.blueInk.opacity(0.45))
+            } else {
+                a.swiftUI.foregroundColor = p.key == key ? T.oliveInk : T.glyph
+            }
+            out += a
+        }
+        return out
     }
 
     // MARK: parts
@@ -701,7 +721,19 @@ struct DictEntryBody: View {
             ForEach(Array(s.ex.enumerated()), id: \.offset) { _, e in
                 HStack(alignment: .top, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(e[0]).font(.body).foregroundStyle(T.glyph)
+                        if e.count > 1 {
+                            Text(exampleHan(e[0], e[1])).font(.body)
+                                .environment(\.openURL, OpenURLAction { url in
+                                    let prefix = "ffword://w/"
+                                    if url.absoluteString.hasPrefix(prefix),
+                                       let k = String(url.absoluteString.dropFirst(prefix.count)).removingPercentEncoding {
+                                        tapped = DictKey(k: k)
+                                    }
+                                    return .handled
+                                })
+                        } else {
+                            Text(e[0]).font(.body).foregroundStyle(T.glyph)
+                        }
                         if e.count > 1 { Text(dict.sentenceText(e[1], rom, place: place, han: e[0])).font(T.lat(15)).foregroundStyle(T.greenInk) }
                         if e.count > 2, !e[2].isEmpty { Text(e[2]).font(.footnote).foregroundStyle(T.muted) }
                     }
