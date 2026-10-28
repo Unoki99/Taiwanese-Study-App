@@ -37,6 +37,10 @@ enum T {
     static let swapInk = Color(hex: 0xff9fd2)
     static let pinkEdge = Color(hex: 0xa04a78)
     static let pinkInk = Color(hex: 0xf8cbe2)
+    /// your own words (自訂), not from the MOE dictionary
+    static let ownInk = Color(hex: 0xc39bff)
+    static let own = Color(hex: 0x4c3a5b)
+    static let ownEdge = Color(hex: 0x7b3c9b)
 
     /// 皓羅 / 台羅 / 白話字 text
     static func lat(_ size: CGFloat) -> Font { .custom("DejaVuSans", size: size) }

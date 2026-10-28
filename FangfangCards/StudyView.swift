@@ -267,7 +267,12 @@ struct StudyView: View {
                         Spacer()
                         if let a = c.a { PlayButton(path: Audio.wordPath(a), size: 34) }
                     }
-                    Text(c.firstMeaning).foregroundStyle(T.glyph)
+                    // 例句填空: the meaning the sentence is about; otherwise the word's first meaning
+                    let sense = q.kind == .fillBlank ? q.example.flatMap { c.meaning(of: $0) } : nil
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        if let p = sense?.p, !p.isEmpty { Chip(text: p) }
+                        Text(sense?.t ?? c.firstMeaning).foregroundStyle(T.glyph)
+                    }
                     if q.kind == .fillBlank, let x = q.example {
                         Text(store.exampleHan(c, x, place)).padding(.top, 4)
                         Text(store.exampleRom(c, x, rom, place)).font(T.lat(15)).foregroundStyle(T.greenInk)

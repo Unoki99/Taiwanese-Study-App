@@ -73,6 +73,7 @@ final class Store: ObservableObject {
 
     /// saves a moment later, off the main thread, so swiping never waits for the disk
     func save() {
+        WidgetBridge.progressChanged(self)
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 700_000_000)
@@ -213,7 +214,9 @@ final class Store: ObservableObject {
                 } catch { return .failure(error) }
             }.value
             switch result {
-            case .success(let d): self.dict = d
+            case .success(let d):
+                d.setUserWords(Set(self.ownKeys))       // your 自訂 words join the dictionary
+                self.dict = d
             case .failure(let e): self.dictError = "字典讀取失敗：\(e.localizedDescription)"
             }
             self.dictLoading = false
@@ -277,8 +280,14 @@ final class Store: ObservableObject {
 
     /// the card's own reading for the place is worked out by rule, not stated by the dictionary
     func isGuessed(_ card: Card, _ place: Int) -> Bool {
-        guard place >= 0, card.differs(in: place), let d = dict else { return false }
+        guard place >= 0, cardDiffers(card, place), let d = dict else { return false }
         return !d.isStated(card.k, place)
+    }
+
+    /// the card's reading in the place differs from 通行 (not counting 臺南/高雄 o → or, which is the same sound)
+    func cardDiffers(_ card: Card, _ place: Int) -> Bool {
+        if let d = dict { return d.differsFromCommon(card.k, place) }
+        return card.differs(in: place)
     }
 
     /// status of a dictionary word in the cards: nil = not a card
@@ -302,6 +311,25 @@ final class Store: ObservableObject {
         progress.saved[key] = isSaved(key) ? -now : now
         save()
     }
+
+    // MARK: 自訂 (your own words)
+
+    /// your own words, newest first
+    var ownKeys: [String] { progress.own.filter { $0.value > 0 }.sorted { $0.value > $1.value }.map { $0.key } }
+    func isOwn(_ key: String) -> Bool { (progress.own[key] ?? -1) > 0 }
+
+    func addOwn(_ key: String) {
+        progress.own[key] = Date().timeIntervalSince1970
+        save()
+        applyOwn()
+    }
+    func removeOwn(_ key: String) {
+        progress.own[key] = -Date().timeIntervalSince1970
+        save()
+        applyOwn()
+    }
+    /// let 轉換 and 詞典 know about the current list
+    func applyOwn() { dict?.setUserWords(Set(ownKeys)) }
 
     /// how common a word is (its place in the card order)
     func rankOf(_ key: String) -> Int { rank[key] ?? Int.max }
@@ -419,6 +447,12 @@ final class Store: ObservableObject {
             if (t > 0) != isSaved(k) { n += 1 }
             progress.saved[k] = t
         }
+        var ownChanged = false
+        for (k, t) in obj["own"] as? [String: Double] ?? [:] where abs(t) > abs(progress.own[k] ?? 0) {
+            if (t > 0) != isOwn(k) { n += 1; ownChanged = true }
+            progress.own[k] = t
+        }
+        if ownChanged { applyOwn() }
         for (k, s) in status where byKey[k] != nil {
             let theirs = added[k] ?? 0, mine = progress.added[k] ?? -1
             if theirs > mine || (progress.status[k] == nil && theirs >= mine) {
@@ -438,7 +472,7 @@ final class Store: ObservableObject {
             "app": "fangfang-cards", "version": 1,
             "exported": ISO8601DateFormatter().string(from: Date()),
             "status": progress.status, "added": progress.added, "streak": progress.streak,
-            "saved": progress.saved,
+            "saved": progress.saved, "own": progress.own,
         ]
         return (try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys])) ?? Data()
     }

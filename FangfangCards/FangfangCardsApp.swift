@@ -29,7 +29,7 @@ struct FangfangCardsApp: App {
         .commands { TextSizeCommands() }
         .onChange(of: scenePhase) { _, phase in
             // pull changes from the other device when the app opens, back up when it closes
-            if phase == .active { store.syncNow() }
+            if phase == .active { store.syncNow(); WidgetBridge.appOpened(store) }
             else if phase == .background { store.saveNow(); store.syncNow() }
         }
     }
@@ -39,6 +39,7 @@ struct RootView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var router = Router.shared
     @AppStorage("place") private var place = -1
+    @AppStorage("rom") private var rom = 0
 
     private var tabs: some View {
         TabView(selection: $router.tab) {
@@ -84,7 +85,14 @@ struct RootView: View {
             }
         }
         // a place chosen anywhere: load the dictionary (guessed readings, example sentences)
-        .onChange(of: place) { if place >= 0 { store.loadDict() } }
+        .onChange(of: place) {
+            if place >= 0 { store.loadDict() }
+            WidgetBridge.writeState(store); WidgetBridge.rebuildIfNeeded(store)
+        }
+        // the 分類 widgets: new spelling, the word list once loaded, local readings once the dictionary is there
+        .onChange(of: rom) { WidgetBridge.writeState(store) }
+        .onChange(of: store.loaded) { WidgetBridge.appOpened(store) }
+        .onChange(of: store.dict != nil) { WidgetBridge.rebuildIfNeeded(store) }
     }
 }
 

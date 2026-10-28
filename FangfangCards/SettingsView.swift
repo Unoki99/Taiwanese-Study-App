@@ -100,6 +100,7 @@ struct SettingsView: View {
                 credit("詞條、讀音、釋義、例句、音檔、近反義詞、異用字、腔口差異、各地講法、分類、華語對照詞", "教育部《臺灣台語常用詞辭典》（創用CC 姓名標示-禁止改作 3.0 臺灣）。釋義、例句原文照錄，音檔未經修改；讀音依規則由台羅轉成皓羅、方音、白話字。")
                 credit("推算的內容", "辭典沒寫的腔口讀音和例句的腔口讀音是本 App 依規則推算的，不是教育部的資料，用紅色和「推測」標示。")
                 credit("音節編碼", "YuRen-tw《rime-taigi-tps》的拼音系統（經作者同意使用）")
+                if let c = TaigiSpeechInfo.credit { credit("轉換的朗讀", c) }
                 credit("皓羅拼寫系統", "Unoki99")
                 credit("自補詞條", "Unoki99 自行補充，非教育部辭典內容")
                 credit("皓羅字型", "DejaVu Sans（自由授權字型）")

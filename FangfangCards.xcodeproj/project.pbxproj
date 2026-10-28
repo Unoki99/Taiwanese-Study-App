@@ -6,8 +6,37 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F0F0000000000000000000D0 /* FangfangWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F0F0000000000000000000D1 /* FangfangWidgetExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		F0F0000000000000000000DD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F0F0000000000000000000A9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F0F0000000000000000000D7;
+			remoteInfo = FangfangWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F0F0000000000000000000DB /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F0F0000000000000000000D0 /* FangfangWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		F0F0000000000000000000A1 /* FangfangCards.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FangfangCards.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0F0000000000000000000D1 /* FangfangWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FangfangWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +45,27 @@
 			path = FangfangCards;
 			sourceTree = "<group>";
 		};
+		F0F0000000000000000000D2 /* FangfangWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FangfangWidget;
+			sourceTree = "<group>";
+		};
+		F0F0000000000000000000D3 /* WidgetShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WidgetShared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		F0F0000000000000000000A3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0F0000000000000000000D4 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +79,8 @@
 			isa = PBXGroup;
 			children = (
 				F0F0000000000000000000A2 /* FangfangCards */,
+				F0F0000000000000000000D2 /* FangfangWidget */,
+				F0F0000000000000000000D3 /* WidgetShared */,
 				F0F0000000000000000000A5 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +89,7 @@
 			isa = PBXGroup;
 			children = (
 				F0F0000000000000000000A1 /* FangfangCards.app */,
+				F0F0000000000000000000D1 /* FangfangWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -55,13 +104,16 @@
 				F0F0000000000000000000A7 /* Sources */,
 				F0F0000000000000000000A3 /* Frameworks */,
 				F0F0000000000000000000A8 /* Resources */,
+				F0F0000000000000000000DB /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				F0F0000000000000000000DE /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				F0F0000000000000000000A2 /* FangfangCards */,
+				F0F0000000000000000000D3 /* WidgetShared */,
 			);
 			name = FangfangCards;
 			packageProductDependencies = (
@@ -69,6 +121,29 @@
 			productName = FangfangCards;
 			productReference = F0F0000000000000000000A1 /* FangfangCards.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F0F0000000000000000000D7 /* FangfangWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0F0000000000000000000D8 /* Build configuration list for PBXNativeTarget "FangfangWidgetExtension" */;
+			buildPhases = (
+				F0F0000000000000000000D5 /* Sources */,
+				F0F0000000000000000000D4 /* Frameworks */,
+				F0F0000000000000000000D6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F0F0000000000000000000D2 /* FangfangWidget */,
+				F0F0000000000000000000D3 /* WidgetShared */,
+			);
+			name = FangfangWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = FangfangWidgetExtension;
+			productReference = F0F0000000000000000000D1 /* FangfangWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +156,9 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					F0F0000000000000000000A6 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					F0F0000000000000000000D7 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -101,12 +179,20 @@
 			projectRoot = "";
 			targets = (
 				F0F0000000000000000000A6 /* FangfangCards */,
+				F0F0000000000000000000D7 /* FangfangWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		F0F0000000000000000000A8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F0F0000000000000000000D6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -123,7 +209,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F0F0000000000000000000D5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F0F0000000000000000000DE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = F0F0000000000000000000D7 /* FangfangWidgetExtension */;
+			targetProxy = F0F0000000000000000000DD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		F0F0000000000000000000C1 /* Debug */ = {
@@ -175,7 +277,10 @@
 		F0F0000000000000000000C3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_GROUP = group.com.unoki99.fangfangcards;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = FangfangCards.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -206,7 +311,10 @@
 		F0F0000000000000000000C4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APP_GROUP = group.com.unoki99.fangfangcards;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = FangfangCards.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -234,6 +342,64 @@
 			};
 			name = Release;
 		};
+		F0F0000000000000000000D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_GROUP = group.com.unoki99.fangfangcards;
+				CODE_SIGN_ENTITLEMENTS = FangfangWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "FangfangWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "方方詞卡";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.unoki99.fangfangcards.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "WIDGET_EXT DEBUG $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F0F0000000000000000000DA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_GROUP = group.com.unoki99.fangfangcards;
+				CODE_SIGN_ENTITLEMENTS = FangfangWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "FangfangWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "方方詞卡";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.unoki99.fangfangcards.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "WIDGET_EXT $(inherited)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -251,6 +417,15 @@
 			buildConfigurations = (
 				F0F0000000000000000000C1 /* Debug */,
 				F0F0000000000000000000C2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F0F0000000000000000000D8 /* Build configuration list for PBXNativeTarget "FangfangWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F0F0000000000000000000D9 /* Debug */,
+				F0F0000000000000000000DA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

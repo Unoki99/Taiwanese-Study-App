@@ -243,6 +243,33 @@ final class Dict: @unchecked Sendable {
         return zip(hs, cs).reduce(0) { $0 + charScore($1.0, $1.1) } / Double(hs.count)
     }
 
+    // MARK: 自訂 (your own words)
+
+    /// your own words (not in the MOE dictionary): found by 轉換 and 詞典 like any other word
+    private(set) var userKeys: Set<String> = []
+    func isUser(_ key: String) -> Bool { userKeys.contains(key) }
+
+    /// the current list of your words: the ones removed leave the dictionary, new ones join it
+    func setUserWords(_ keys: Set<String>) {
+        let wanted = Set(keys.filter { !baseKeys.contains($0) && altParent[$0] == nil && $0.contains("\t") })
+        guard wanted != userKeys else { return }
+        for k in userKeys.subtracting(wanted) {
+            let h = Dict.hanOf(k), c = Dict.codesOf(k)
+            hanMap[h]?.removeAll { $0 == c }
+            if hanMap[h]?.isEmpty == true { hanMap[h] = nil }
+            codeMap[c]?.removeAll { $0 == h }
+            if codeMap[c]?.isEmpty == true { codeMap[c] = nil }
+        }
+        for k in wanted.subtracting(userKeys) {
+            let h = Dict.hanOf(k), c = Dict.codesOf(k)
+            if !(hanMap[h]?.contains(c) ?? false) { hanMap[h, default: []].append(c) }
+            if !(codeMap[c]?.contains(h) ?? false) { codeMap[c, default: []].append(h) }
+            maxHan = max(maxHan, min(h.count, 12))
+            maxSyl = max(maxSyl, c.split(separator: " ").count)
+        }
+        userKeys = wanted
+    }
+
     // MARK: keys
 
     func keyOf(_ o: Opt) -> String? {
@@ -313,12 +340,26 @@ final class Dict: @unchecked Sendable {
 
     func word(_ key: String, _ sys: Int, _ place: Int) -> String { render(tokensFor(key, place), sys, place) }
 
+    /// a local syllable that sounds like the 通行 one. In 臺南 and 高雄 o is said "or" (ㄜ), which is how 通行 o
+    /// is said too: MOE just spells it o. So there o → or is no change (the "or" spelling is still shown).
+    func sameSound(_ common: String, _ local: String, _ place: Int) -> Bool {
+        common == local || (orPlaces.contains(place) && common.replacingOccurrences(of: "ø", with: "ɵ") == local)
+    }
+
+    /// the place says the word differently from 通行 (not counting 臺南/高雄 o → or)
+    func differsFromCommon(_ key: String, _ place: Int) -> Bool {
+        guard place >= 0, let dc = raw.dia[key]?[String(place)] else { return false }
+        let a = Dict.codesOf(key).split(separator: " ").map(String.init), b = dc.split(separator: " ").map(String.init)
+        guard a.count == b.count else { return true }
+        return b.indices.contains { !sameSound(a[$0], b[$0], place) }
+    }
+
     /// syllables (by position) whose reading for the place is worked out by rule, not stated by the dictionary
     func guessedSyllables(_ key: String, _ place: Int) -> Set<Int> {
         guard place >= 0, !isStated(key, place), let dc = raw.dia[key]?[String(place)] else { return [] }
-        let a = Dict.codesOf(key).split(separator: " "), b = dc.split(separator: " ")
+        let a = Dict.codesOf(key).split(separator: " ").map(String.init), b = dc.split(separator: " ").map(String.init)
         guard a.count == b.count else { return Set(0..<b.count) }
-        return Set(b.indices.filter { a[$0] != b[$0] })
+        return Set(b.indices.filter { !sameSound(a[$0], b[$0], place) })
     }
 
     /// the word as (text, guessed) pieces, so guessed syllables can be coloured
@@ -788,7 +829,7 @@ final class Dict: @unchecked Sendable {
             // sure only when the dictionary states this word's reading for the place
             let sure = whole && isStated(k, place)
             for (j, n) in seg.enumerated() {
-                rep[n] = (sure || cs[j] == tks[n].code) ? cs[j] : "?" + cs[j]
+                rep[n] = (sure || sameSound(tks[n].code, cs[j], place)) ? cs[j] : "?" + cs[j]
             }
         }
         for g in groups {
@@ -828,11 +869,46 @@ final class Dict: @unchecked Sendable {
         var out: [(label: String, codes: String, tokens: String?)] = []
         let main = Dict.codesOf(key), shown = codesFor(key, place)
         for x in alsoSaid(key, place) where x != shown { out.append(("也講", x, nil)) }
-        if shown != main, !alsoSaid(key, place).contains(main) { out.append(("通行", main, raw.tok[key])) }
+        if differsFromCommon(key, place), !alsoSaid(key, place).contains(main) { out.append(("通行", main, raw.tok[key])) }
         for a in raw.alt[key] ?? [] where !a.isEmpty && a[0] != shown {
             out.append(((a.count > 1 && !a[1].isEmpty) ? a[1] : "又", a[0], a.count > 2 ? a[2] : nil))
         }
         return out
+    }
+
+    // MARK: sentences with a word (查詞 → 台語句子裡有「…」)
+
+    /// an example sentence that uses a word: [漢字, template, 華語, audio], and the entry it's listed under
+    struct SentenceHit: Sendable { let ex: [String]; let entry: String; let word: String }
+    private var sentenceIndex: [String: [(ex: [String], entry: String)]]? = nil
+    private let sentenceLock = NSLock()
+
+    /// every example sentence in the dictionary that uses one of these words (same characters and reading,
+    /// found the same way as the tappable words in example sentences), shortest first
+    func sentences(with keys: [String], limit: Int = 300) -> [SentenceHit] {
+        guard !keys.isEmpty else { return [] }
+        sentenceLock.lock()
+        if sentenceIndex == nil {
+            var idx: [String: [(ex: [String], entry: String)]] = [:]
+            for (entry, senses) in raw.ex {
+                for exs in senses {
+                    for e in exs where e.count > 1 {
+                        var seen = Set<String>()
+                        for p in exampleWords(e[0], e[1]) {
+                            if let k = p.key, seen.insert(k).inserted { idx[k, default: []].append((e, entry)) }
+                        }
+                    }
+                }
+            }
+            sentenceIndex = idx
+        }
+        let idx = sentenceIndex ?? [:]
+        sentenceLock.unlock()
+        var out: [SentenceHit] = [], seenHan = Set<String>()
+        for k in keys {
+            for h in idx[k] ?? [] where seenHan.insert(h.ex[0]).inserted { out.append(SentenceHit(ex: h.ex, entry: h.entry, word: k)) }
+        }
+        return Array(out.sorted { $0.ex[0].count < $1.ex[0].count }.prefix(limit))
     }
 
     // MARK: meanings

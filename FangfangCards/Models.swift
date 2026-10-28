@@ -79,6 +79,8 @@ struct Card: Decodable, Identifiable, Hashable {
     func differs(in place: Int) -> Bool { place >= 0 && v?[String(place)] != nil }
     var syllables: Int { r[0].split(separator: "-").count }
     var firstMeaning: String { d.first?.t ?? "" }
+    /// the meaning an example sentence belongs to (成 in 伊佮𪜶老爸生做誠成 → 相似, not 完成)
+    func meaning(of x: Example) -> Def? { d.first { $0.x.contains { $0.n == x.n && $0.h == x.h } } }
     var blankExamples: [Example] { d.flatMap { $0.x }.filter { $0.bh != nil && $0.br != nil } }
     var firstExample: Example? { d.lazy.compactMap { $0.x.first }.first }
 }
@@ -98,6 +100,8 @@ struct Progress: Codable {
     var streak: [String: Int] = [:]
     /// 收藏 in 轉換: key -> time saved (negative = removed, so synced devices remove it too)
     var saved: [String: Double] = [:]
+    /// 自訂: words you added yourself (key -> time added; negative = removed, so synced devices remove it too)
+    var own: [String: Double] = [:]
 
     init() {}
     init(from decoder: Decoder) throws {
@@ -106,6 +110,7 @@ struct Progress: Codable {
         added = try c.decodeIfPresent([String: Double].self, forKey: .added) ?? [:]
         streak = try c.decodeIfPresent([String: Int].self, forKey: .streak) ?? [:]
         saved = try c.decodeIfPresent([String: Double].self, forKey: .saved) ?? [:]
+        own = try c.decodeIfPresent([String: Double].self, forKey: .own) ?? [:]
     }
 }
 

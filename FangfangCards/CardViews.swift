@@ -151,7 +151,7 @@ struct CardDetail: View {
                             ForEach(Array(store.alsoSaid(card, rom, place).enumerated()), id: \.offset) { _, x in
                                 OtherRow(label: "也講", rom: x.rom, zy: x.zy)
                             }
-                            if card.differs(in: place), !store.alsoSaid(card, rom, place).contains(where: { $0.rom == card.rom(rom) }) {
+                            if store.cardDiffers(card, place), !store.alsoSaid(card, rom, place).contains(where: { $0.rom == card.rom(rom) }) {
                                 OtherRow(label: "通行", rom: card.rom(rom), zy: card.z)
                             }
                             ForEach(Array((card.o ?? []).enumerated()), id: \.offset) { _, o in
@@ -276,7 +276,7 @@ struct CardChips: View {
             RegChip(reg: card.g)
             if card.s == 1 { Chip(text: "替", fill: T.rust, edge: T.rustEdge, ink: T.rustInk) }
             if let t = card.t { Chip(text: t, fill: T.fn, edge: T.fnEdge, ink: T.muted) }
-            if card.differs(in: place), place < store.places.count {
+            if store.cardDiffers(card, place), place < store.places.count {
                 Chip(text: String(store.places[place].prefix(2)), fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
                 if store.isGuessed(card, place) { Chip(text: "推測", fill: T.fn, edge: T.fnEdge, ink: T.muted) }
             }
