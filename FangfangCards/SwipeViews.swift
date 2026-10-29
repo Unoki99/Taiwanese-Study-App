@@ -31,7 +31,7 @@ struct SwipeStack: View {
         let right = offset.width > 0
         let amount = min(abs(offset.width) / 110, 1)
         return Text(right ? "認識" : "不熟")
-            .font(.title.weight(.heavy))
+            .ffFont(.title, .heavy)
             .padding(.horizontal, 16).padding(.vertical, 6)
             .foregroundStyle(right ? T.greenInk : T.rustInk)
             .background(RoundedRectangle(cornerRadius: 12).fill((right ? T.green : T.rust).opacity(0.9)))
@@ -105,7 +105,7 @@ struct SwipeButtons: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: icon).scaledFont(22, weight: .heavy)
-                Text(label).font(.caption2.weight(.bold))
+                Text(label).ffFont(.caption2, .bold)
             }
             .frame(width: 68, height: 68)
             .foregroundStyle(ink)
@@ -125,10 +125,10 @@ struct NewDeckView: View {
         let queue = store.newQueue(4, topic: topic)
         VStack(spacing: 18) {
             Text("已看 \(store.seenCount) / \(store.cards.count)　熟悉 \(store.knownCount)　不熟 \(store.unknownCount)")
-                .font(.footnote).foregroundStyle(T.muted)
+                .ffFont(.footnote).foregroundStyle(T.muted)
             if queue.isEmpty {
                 Spacer()
-                Text(topic < 0 ? "全部的詞都看過了！" : "這個主題的詞都看過了！").font(.title3).foregroundStyle(T.muted)
+                Text(topic < 0 ? "全部的詞都看過了！" : "這個主題的詞都看過了！").ffFont(.title3).foregroundStyle(T.muted)
                 Spacer()
             } else {
                 DeckArea(cards: queue) { card, right in
@@ -142,21 +142,16 @@ struct NewDeckView: View {
         .frame(maxWidth: 560)
         .frame(maxWidth: .infinity)
         .appBackground()
-        .navigationTitle("新詞")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    Picker("主題", selection: $topic) {
-                        Text("全部（最常用的先）").tag(-1)
-                        ForEach(store.topics) { t in Text("\(t.name)（\(t.count)）").tag(t.id) }
-                    }
-                } label: {
-                    Label(topicName, systemImage: "square.stack.3d.up").labelStyle(.titleAndIcon)
-                        .font(.subheadline.weight(.semibold))
+        .rootPage("新詞") {
+            Menu {
+                Picker("主題", selection: $topic) {
+                    Text("全部（最常用的先）").tag(-1)
+                    ForEach(store.topics) { t in Text("\(t.name)（\(t.count)）").tag(t.id) }
                 }
+            } label: {
+                Label(topicName, systemImage: "square.stack.3d.up").labelStyle(.titleAndIcon)
+                    .ffFont(.subheadline, .semibold)
             }
-            ToolbarItem(placement: .topBarTrailing) { RomButton() }
         }
         .onChange(of: queue.first?.k) { _, _ in
             if autoPlay, let a = queue.first?.a { Player.shared.play(Audio.wordPath(a)) }

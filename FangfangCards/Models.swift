@@ -83,6 +83,14 @@ struct Card: Decodable, Identifiable, Hashable {
     func meaning(of x: Example) -> Def? { d.first { $0.x.contains { $0.n == x.n && $0.h == x.h } } }
     var blankExamples: [Example] { d.flatMap { $0.x }.filter { $0.bh != nil && $0.br != nil } }
     var firstExample: Example? { d.lazy.compactMap { $0.x.first }.first }
+    /// examples for the swipe card: one from each of two different meanings (meaning number, example);
+    /// with only one meaning that has examples, two of its examples
+    var cardExamples: [(n: Int, x: Example)] {
+        var out: [(n: Int, x: Example)] = []
+        for (i, def) in d.enumerated() { if let x = def.x.first { out.append((i + 1, x)) }; if out.count == 2 { return out } }
+        if out.count == 1, let i = d.firstIndex(where: { !$0.x.isEmpty }), d[i].x.count > 1 { out.append((i + 1, d[i].x[1])) }
+        return out
+    }
 }
 
 struct DeckFile: Decodable {

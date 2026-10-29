@@ -66,7 +66,7 @@ final class Store: ObservableObject {
         }
         loaded = true
         // with a place chosen, example sentences use the dictionary to find each word's local reading
-        if (UserDefaults.standard.object(forKey: "place") as? Int ?? -1) >= 0 { loadDict() }
+        if (UserDefaults.standard.object(forKey: "place") as? Int ?? -1) >= 0 || ToneColors.system != 0 { loadDict() }
         restoreBackupState()
         syncNow()
     }
@@ -230,14 +230,22 @@ final class Store: ObservableObject {
         return d.alsoSaid(card.k, place).map { (d.codes($0, r, place), d.codes($0, 3, place)) }
     }
 
+    /// a card's 漢字: in tone colours when 聲調顏色 is on
+    func cardHan(_ card: Card, _ place: Int, base: Color) -> AttributedString {
+        if ToneColors.system != 0, let d = dict { return d.hanText(card.k, place, base: base) }
+        var a = AttributedString(card.h); a.swiftUI.foregroundColor = base
+        return a
+    }
+
     /// a card's reading, with syllables guessed for the place in red
     func cardRom(_ card: Card, _ rom: Int, _ place: Int) -> AttributedString {
         let r = min(max(rom, 0), 2)
+        if ToneColors.system != 0, let d = dict { return d.wordText(card.k, r, place) }      // 聲調顏色
         if place >= 0, let d = dict, !d.guessedSyllables(card.k, place).isEmpty { return d.wordText(card.k, r, place) }
         return AttributedString(card.rom(r, place))
     }
     func cardZy(_ card: Card, _ place: Int) -> AttributedString {
-        if place >= 0, let d = dict { return d.wordText(card.k, 3, place) }
+        if place >= 0 || ToneColors.system != 0, let d = dict { return d.wordText(card.k, 3, place) }
         return AttributedString(card.zy(place))
     }
 
@@ -245,13 +253,13 @@ final class Store: ObservableObject {
     /// (guessed readings are red)
     func exampleRom(_ card: Card, _ x: Example, _ rom: Int, _ place: Int) -> AttributedString {
         let r = min(max(rom, 0), 2)
-        guard place >= 0, let d = dict, let e = dictExample(d, card, x) else { return AttributedString(x.r[r]) }
+        guard place >= 0 || ToneColors.system != 0, let d = dict, let e = dictExample(d, card, x) else { return AttributedString(x.r[r]) }
         return d.sentenceText(e[1], r, place: place, han: e[0], zh: e.count > 2 ? e[2] : nil)
     }
 
     /// a card's example in 漢字; with a place, the words that place says differently are swapped in (pink)
     func exampleHan(_ card: Card, _ x: Example, _ place: Int) -> AttributedString {
-        if place >= 0, let d = dict, let e = dictExample(d, card, x) {
+        if place >= 0 || ToneColors.system != 0, let d = dict, let e = dictExample(d, card, x) {
             return d.exampleHanText(e[0], e[1], place: place, zh: e.count > 2 ? e[2] : nil, base: T.blueInk)
         }
         var a = AttributedString(x.h); a.swiftUI.foregroundColor = T.blueInk

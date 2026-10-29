@@ -40,20 +40,20 @@ struct RootView: View {
     @ObservedObject private var router = Router.shared
     @AppStorage("place") private var place = -1
     @AppStorage("rom") private var rom = 0
+    @AppStorage(ToneColors.key) private var toneSys = 0
 
     private var tabs: some View {
         TabView(selection: $router.tab) {
-            NavigationStack { NewDeckView().settingsButton() }
+            NavigationStack { NewDeckView() }
                 .tabItem { Label("新詞", systemImage: "rectangle.stack") }.tag(0)
-            NavigationStack { UnknownView().settingsButton() }
-                .tabItem { Label("不熟", systemImage: "questionmark.circle") }
-                .badge(store.unknownCount).tag(1)
-            NavigationStack { KnownView().settingsButton() }
-                .tabItem { Label("熟悉", systemImage: "checkmark.circle") }.tag(2)
-            NavigationStack { ConverterView().settingsButton() }
-                .tabItem { Label("轉換", systemImage: "arrow.left.arrow.right") }.tag(3)
-            NavigationStack { DictionaryView().settingsButton() }
+            NavigationStack { UnknownView().rootPage("不熟") }
+                .tabItem { Label("不熟", systemImage: "questionmark.circle") }.tag(1)
+            NavigationStack { DictionaryView().rootPage("詞典") }
                 .tabItem { Label("詞典", systemImage: "character.book.closed") }.tag(4)
+            NavigationStack { KnownView().rootPage("熟悉") }
+                .tabItem { Label("熟悉", systemImage: "checkmark.circle") }.tag(2)
+            NavigationStack { ConverterView().rootPage("轉換") }
+                .tabItem { Label("轉換", systemImage: "arrow.left.arrow.right") }.tag(3)
         }
     }
 
@@ -63,12 +63,12 @@ struct RootView: View {
                 if #available(iOS 18.0, *) {
                     // iPad and Mac: the tabs can become a sidebar
                     TabView(selection: $router.tab) {
-                        Tab("新詞", systemImage: "rectangle.stack", value: 0) { NavigationStack { NewDeckView().settingsButton() } }
-                        Tab("不熟", systemImage: "questionmark.circle", value: 1) { NavigationStack { UnknownView().settingsButton() } }
-                            .badge(store.unknownCount)
-                        Tab("熟悉", systemImage: "checkmark.circle", value: 2) { NavigationStack { KnownView().settingsButton() } }
-                        Tab("轉換", systemImage: "arrow.left.arrow.right", value: 3) { NavigationStack { ConverterView().settingsButton() } }
-                        Tab("詞典", systemImage: "character.book.closed", value: 4) { NavigationStack { DictionaryView().settingsButton() } }
+                        // order: 新詞 不熟 詞典 熟悉 轉換 (the values stay the same for Shortcuts)
+                        Tab("新詞", systemImage: "rectangle.stack", value: 0) { NavigationStack { NewDeckView() } }
+                        Tab("不熟", systemImage: "questionmark.circle", value: 1) { NavigationStack { UnknownView().rootPage("不熟") } }
+                        Tab("詞典", systemImage: "character.book.closed", value: 4) { NavigationStack { DictionaryView().rootPage("詞典") } }
+                        Tab("熟悉", systemImage: "checkmark.circle", value: 2) { NavigationStack { KnownView().rootPage("熟悉") } }
+                        Tab("轉換", systemImage: "arrow.left.arrow.right", value: 3) { NavigationStack { ConverterView().rootPage("轉換") } }
                     }
                     .tabViewStyle(.sidebarAdaptable)
                 } else {
@@ -91,6 +91,8 @@ struct RootView: View {
         }
         // the 分類 widgets: new spelling, the word list once loaded, local readings once the dictionary is there
         .onChange(of: rom) { WidgetBridge.writeState(store) }
+        // 聲調顏色 needs the dictionary (word classes, readings in sentences)
+        .onChange(of: toneSys) { if toneSys != 0 { store.loadDict() } }
         .onChange(of: store.loaded) { WidgetBridge.appOpened(store) }
         .onChange(of: store.dict != nil) { WidgetBridge.rebuildIfNeeded(store) }
     }
@@ -118,10 +120,45 @@ extension View {
     func settingsButton() -> some View {
         toolbar { ToolbarItem(placement: .topBarTrailing) { SettingsButton() } }
     }
+
+    /// a main page (tab): its name isn't shown (the tab bar shows it; it's still the back button's label).
+    /// At the right, always in this order: the page's own buttons, spelling / 腔口 / 調, ⚙︎ last.
+    func rootPage(_ title: String) -> some View { modifier(RootPageBar(title: title, extra: EmptyView())) }
+    func rootPage<E: View>(_ title: String, @ViewBuilder extra: () -> E) -> some View {
+        modifier(RootPageBar(title: title, extra: extra()))
+    }
+}
+
+struct RootPageBar<Extra: View>: ViewModifier {
+    let title: String
+    let extra: Extra
+    func body(content: Content) -> some View {
+        content
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) { Text("") }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    extra
+                    RomButton()
+                    SettingsButton()
+                }
+            }
+    }
 }
 
 /// Mac: a sensible starting and minimum window size
 enum MacWindow {
+    /// Mac: every window uses the chosen text size (設定 → 文字大小)
+    @MainActor static func applyTextSize(_ level: Int) {
+        #if targetEnvironment(macCatalyst)
+        let size = UIContentSizeCategory(TextSize.levels[TextSize.clamp(level)])
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            scene.traitOverrides.preferredContentSizeCategory = size
+        }
+        #endif
+    }
+
     @MainActor static func setUp() {
         #if targetEnvironment(macCatalyst)
         for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {

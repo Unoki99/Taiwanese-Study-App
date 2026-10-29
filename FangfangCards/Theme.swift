@@ -70,6 +70,7 @@ struct RomButton: View {
             .fixedSize()
             #endif
             PlaceMenu()
+            ToneMenu()
         }
         #if targetEnvironment(macCatalyst)
         .fixedSize()
@@ -93,7 +94,7 @@ struct RomButton: View {
     }
     private var plainText: some View {
         Text(ROM_NAMES[min(max(rom, 0), 2)])
-            .font(.subheadline.weight(.bold))
+            .ffFont(.subheadline, .bold)
             .foregroundStyle(T.greenInk)
     }
     private var capsule: some View {
@@ -111,7 +112,7 @@ struct Chip: View {
     var ink: Color = T.oliveInk
     var body: some View {
         Text(text)
-            .font(.caption.weight(.bold))
+            .ffFont(.caption, .bold)
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(RoundedRectangle(cornerRadius: 6).fill(fill))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(edge, lineWidth: 1.5))
@@ -136,7 +137,7 @@ struct NumBadge: View {
     let n: Int
     var body: some View {
         Text("\(n)")
-            .font(.caption2.weight(.heavy))
+            .ffFont(.caption2, .heavy)
             .frame(minWidth: 18, minHeight: 18)
             .background(Circle().fill(T.fn))
             .overlay(Circle().stroke(T.oliveEdge, lineWidth: 1.5))
@@ -202,7 +203,7 @@ struct PlaceMenu: View {
     }
     private var plainText: some View {
         HStack(spacing: 2) {
-            Text(name).font(.subheadline.weight(.bold))
+            Text(name).ffFont(.subheadline, .bold)
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
         }
         .foregroundStyle(T.purpleInk)
@@ -213,11 +214,11 @@ struct PlaceMenu: View {
 
 /// Mac: how big the text is (設定 → 文字大小, or ⌘+ / ⌘− / ⌘0). iPhone and iPad follow the system's text size.
 enum TextSize {
-    static let levels: [DynamicTypeSize] = [.medium, .large, .xLarge, .xxLarge, .xxxLarge,
-                                            .accessibility1, .accessibility2, .accessibility3]
-    static let names = ["90%", "100%", "110%", "120%", "135%", "160%", "190%", "235%"]
-    static let key = "macTextSize"
-    static let standard = 2                   // a little bigger than the iPad default, which looks small on a Mac screen
+    static let levels: [DynamicTypeSize] = [.large, .xLarge, .xxLarge, .xxxLarge,
+                                            .accessibility1, .accessibility2, .accessibility3, .accessibility4, .accessibility5]
+    static let names = ["100%", "110%", "120%", "135%", "160%", "190%", "235%", "275%", "310%"]
+    static let key = "macTextSize2"
+    static let standard = 3                   // 135%: the Mac's own text sizes are small on a big screen
     static func clamp(_ i: Int) -> Int { min(max(i, 0), levels.count - 1) }
 }
 
@@ -225,21 +226,98 @@ struct MacTextSize: ViewModifier {
     @AppStorage(TextSize.key) private var level = TextSize.standard
     func body(content: Content) -> some View {
         #if targetEnvironment(macCatalyst)
-        content.dynamicTypeSize(TextSize.levels[TextSize.clamp(level)])
+        // text without a style of its own (form rows, list rows…) at the chosen size too
+        content.font(.system(size: 17 * 0.77 * TextSize.factor(level)))
+            // and what the system draws itself (sidebar, menus, text fields), as far as it follows it
+            .onAppear { MacWindow.applyTextSize(level) }
+            .onChange(of: level) { MacWindow.applyTextSize(level) }
         #else
         content
         #endif
     }
 }
 
+extension TextSize {
+    /// Mac: how much bigger than the Mac's own text sizes (100% = the system's size)
+    static let factors: [CGFloat] = [1.0, 1.1, 1.2, 1.35, 1.6, 1.9, 2.35, 2.75, 3.1]
+    static func factor(_ level: Int) -> CGFloat { factors[min(max(level, 0), factors.count - 1)] }
+}
+
+/// The app's text styles. On the Mac they're sized by 設定 → 文字大小 (the system ignores text size there);
+/// on iPhone/iPad they're the usual text styles, which follow the phone's own text size.
+enum FFStyle {
+    case body, callout, subheadline, footnote, caption, caption2, headline, title3, title2, title, largeTitle
+    var font: Font {
+        switch self {
+        case .body: return .body
+        case .callout: return .callout
+        case .subheadline: return .subheadline
+        case .footnote: return .footnote
+        case .caption: return .caption
+        case .caption2: return .caption2
+        case .headline: return .headline
+        case .title3: return .title3
+        case .title2: return .title2
+        case .title: return .title
+        case .largeTitle: return .largeTitle
+        }
+    }
+    /// sizes on iPad (what the app was designed with)
+    var size: CGFloat {
+        switch self {
+        case .body: return 17
+        case .callout: return 16
+        case .subheadline: return 15
+        case .footnote: return 13
+        case .caption: return 12
+        case .caption2: return 11
+        case .headline: return 17
+        case .title3: return 20
+        case .title2: return 22
+        case .title: return 28
+        case .largeTitle: return 34
+        }
+    }
+}
+
+struct FFFont: ViewModifier {
+    let style: FFStyle
+    var weight: Font.Weight? = nil
+    var mono = false
+    @AppStorage(TextSize.key) private var level = TextSize.standard
+    func body(content: Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        // Mac sizes are the iPad sizes × 0.77 (how Mac text compares to iPad text), then the chosen factor
+        let f = Font.system(size: style.size * 0.77 * TextSize.factor(level),
+                            weight: weight ?? (style == .headline ? .semibold : .regular))
+        content.font(mono ? f.monospacedDigit() : f)
+        #else
+        let f = weight.map { style.font.weight($0) } ?? style.font
+        content.font(mono ? f.monospacedDigit() : f)
+        #endif
+    }
+}
+
+/// 皓羅 / 台羅 / 白話字 text (DejaVu Sans), sized with the Mac text size
+struct LatFont: ViewModifier {
+    let size: CGFloat
+    @AppStorage(TextSize.key) private var level = TextSize.standard
+    func body(content: Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        content.font(.custom("DejaVuSans", fixedSize: size * 0.77 * TextSize.factor(level)))
+        #else
+        content.font(T.lat(size))
+        #endif
+    }
+}
+
 /// a fixed-size system font that grows with the Mac text size (on iPhone/iPad it stays as it was)
 struct ScaledFont: ViewModifier {
-    @ScaledMetric private var scaled: CGFloat
     private let size: CGFloat
     private let weight: Font.Weight
     private let on: Bool
+    @AppStorage(TextSize.key) private var level = TextSize.standard
     init(_ size: CGFloat, weight: Font.Weight, on: Bool) {
-        _scaled = ScaledMetric(wrappedValue: size, relativeTo: .body)
         self.size = size; self.weight = weight; self.on = on
     }
     @ViewBuilder func body(content: Content) -> some View {
@@ -247,7 +325,7 @@ struct ScaledFont: ViewModifier {
             content
         } else {
             #if targetEnvironment(macCatalyst)
-            content.font(.system(size: scaled, weight: weight))
+            content.font(.system(size: size * 0.77 * TextSize.factor(level), weight: weight))
             #else
             content.font(.system(size: size, weight: weight))
             #endif
@@ -257,6 +335,10 @@ struct ScaledFont: ViewModifier {
 
 extension View {
     func macTextSize() -> some View { modifier(MacTextSize()) }
+    func ffFont(_ style: FFStyle, _ weight: Font.Weight? = nil, mono: Bool = false) -> some View {
+        modifier(FFFont(style: style, weight: weight, mono: mono))
+    }
+    func latFont(_ size: CGFloat) -> some View { modifier(LatFont(size: size)) }
     func scaledFont(_ size: CGFloat, weight: Font.Weight = .regular, on: Bool = true) -> some View {
         modifier(ScaledFont(size, weight: weight, on: on))
     }

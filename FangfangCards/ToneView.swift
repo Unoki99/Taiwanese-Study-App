@@ -105,13 +105,13 @@ struct ToneView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Text("\(idx + 1) / \(queue.count)").font(.footnote).foregroundStyle(T.muted)
+                    Text("\(idx + 1) / \(queue.count)").ffFont(.footnote).foregroundStyle(T.muted)
                     Spacer()
-                    Text("答對 \(right)").font(.footnote).foregroundStyle(T.greenInk)
+                    Text("答對 \(right)").ffFont(.footnote).foregroundStyle(T.greenInk)
                 }
                 Panel {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("聽發音，選出正確的拼法").font(.subheadline.weight(.bold)).foregroundStyle(T.oliveInk)
+                        Text("聽發音，選出正確的拼法").ffFont(.subheadline, .bold).foregroundStyle(T.oliveInk)
                         HStack {
                             Text(q.card.h).scaledFont(56, weight: .medium).foregroundStyle(T.blueInk)
                                 .lineLimit(1).minimumScaleFactor(0.5)
@@ -120,7 +120,7 @@ struct ToneView: View {
                         }
                         if q.card.syllables > 1 {
                             Text("只有最後一個字的聲調不一樣（前面的字唸起來會變調）")
-                                .font(.caption).foregroundStyle(T.muted)
+                                .ffFont(.caption).foregroundStyle(T.muted)
                         }
                     }
                 }
@@ -148,11 +148,11 @@ struct ToneView: View {
         let isRight = o == q.answer
         let isPicked = chosen == o
         return HStack {
-            Text(o.rom[min(max(rom, 0), 2)]).font(T.lat(28)).foregroundStyle(T.greenInk)
+            Text(o.rom[min(max(rom, 0), 2)]).latFont(28).foregroundStyle(T.greenInk)
             Spacer()
             if answered {
                 Text("\(o.tone)　\(TONE_NAMES[o.tone] ?? "")")
-                    .font(.subheadline.weight(.bold))
+                    .ffFont(.subheadline, .bold)
                     .foregroundStyle(isRight ? T.greenInk : (isPicked ? T.rustInk : T.muted))
             }
         }
@@ -183,21 +183,21 @@ struct ToneView: View {
         return VStack(alignment: .leading, spacing: 14) {
             Panel {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(ok ? "答對了！" : "答錯了").font(.headline).foregroundStyle(ok ? T.greenInk : T.rustInk)
+                    Text(ok ? "答對了！" : "答錯了").ffFont(.headline).foregroundStyle(ok ? T.greenInk : T.rustInk)
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(q.card.h).font(.title2.weight(.medium)).foregroundStyle(T.blueInk)
-                        Text(q.answer.rom[min(max(rom, 0), 2)]).font(T.lat(22)).foregroundStyle(T.greenInk)
+                        Text(q.card.h).ffFont(.title2, .medium).foregroundStyle(T.blueInk)
+                        Text(q.answer.rom[min(max(rom, 0), 2)]).latFont(22).foregroundStyle(T.greenInk)
                         Text(q.card.z).foregroundStyle(T.purpleInk)
                     }
-                    Text("第 \(t) 聲（\(TONE_NAMES[t] ?? "")）\(hint(t))").font(.subheadline).foregroundStyle(T.glyph)
-                    Text(q.card.firstMeaning).font(.footnote).foregroundStyle(T.muted)
+                    Text("第 \(t) 聲（\(TONE_NAMES[t] ?? "")）\(hint(t))").ffFont(.subheadline).foregroundStyle(T.glyph)
+                    Text(q.card.firstMeaning).ffFont(.footnote).foregroundStyle(T.muted)
                 }
             }
             Button {
                 chosen = nil
                 idx += 1
             } label: {
-                Text(idx + 1 >= queue.count ? "看結果" : "下一題").font(.headline).frame(maxWidth: .infinity, minHeight: 44)
+                Text(idx + 1 >= queue.count ? "看結果" : "下一題").ffFont(.headline).frame(maxWidth: .infinity, minHeight: 44)
             }
             .prominentButton(T.greenEdge)
         }
@@ -226,13 +226,13 @@ struct ToneView: View {
         Text(rom == 0
              ? "皓羅：第 1 聲和第 8 聲記號一樣，第 3 聲和第 4 聲記號一樣；第 4、8 聲結尾有 p／t／k／h。"
              : "台羅／白話字：第 1 聲和第 4 聲都沒有記號；第 4、8 聲結尾有 p／t／k／h。")
-            .font(.caption).foregroundStyle(T.muted)
+            .ffFont(.caption).foregroundStyle(T.muted)
             .padding(.top, 6)
     }
 
     private var summary: some View {
         VStack(spacing: 18) {
-            Text("練習完了").font(.largeTitle.weight(.bold)).foregroundStyle(T.glyph)
+            Text("練習完了").ffFont(.largeTitle, .bold).foregroundStyle(T.glyph)
             Text("答對 \(right) 題，答錯 \(wrong) 題").foregroundStyle(T.muted)
             HStack(spacing: 12) {
                 Button { start() } label: { Text("再一輪").frame(maxWidth: .infinity, minHeight: 40) }

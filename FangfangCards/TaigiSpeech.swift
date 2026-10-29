@@ -210,7 +210,7 @@ struct TaigiSpeakButton: View {
                 }
                 Text(ph == .failed ? "連不上鬥拍字" : (ph == .playing || ph == .loading ? "停" : "唸出來"))
             }
-            .font(.footnote.weight(.semibold))
+            .ffFont(.footnote, .semibold)
             .foregroundStyle(ph == .failed ? T.rustInk : T.purpleInk)
             .padding(.horizontal, 10).padding(.vertical, 4)
             .background(Capsule().fill(ph == .failed ? T.rust : Color(hex: 0x4c3a5b)))

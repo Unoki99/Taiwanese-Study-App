@@ -36,15 +36,21 @@ struct SettingsView: View {
                 Toggle("卡片先隱藏意思（點一下才顯示）", isOn: $hideMeaning)
                 Toggle("Liquid Glass 效果", isOn: $glassOn)
                 #if targetEnvironment(macCatalyst)
-                Stepper(value: Binding(get: { TextSize.clamp(textSize) }, set: { textSize = TextSize.clamp($0) }),
-                        in: 0...(TextSize.levels.count - 1)) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("文字大小")
                         Spacer()
                         Text(TextSize.names[TextSize.clamp(textSize)]).foregroundStyle(T.muted).monospacedDigit()
                     }
+                    HStack(spacing: 10) {
+                        Image(systemName: "textformat.size.smaller").foregroundStyle(T.muted)
+                        Slider(value: Binding(get: { Double(TextSize.clamp(textSize)) },
+                                              set: { textSize = TextSize.clamp(Int($0.rounded())) }),
+                               in: 0...Double(TextSize.levels.count - 1), step: 1)
+                        Image(systemName: "textformat.size.larger").foregroundStyle(T.muted)
+                    }
                 }
-                Text("也可以用 ⌘+ 放大、⌘− 縮小、⌘0 回到原本大小。").font(.footnote).foregroundStyle(T.muted)
+                Text("也可以用 ⌘+ 放大、⌘− 縮小、⌘0 回到原本大小。").ffFont(.footnote).foregroundStyle(T.muted)
                 #endif
             }
             Section("發音") {
@@ -58,7 +64,7 @@ struct SettingsView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                    .font(.footnote)
+                    .ffFont(.footnote)
                 Button("清除已下載的音檔") { Player.shared.clearCache(); message = "已清除。" }
             }
             Section("練習") {
@@ -106,7 +112,7 @@ struct SettingsView: View {
                 credit("皓羅字型", "DejaVu Sans（自由授權字型）")
                 credit("方音", "臺灣方音符號")
                 credit("詞頻", "依教育部辭典例句出現次數排序，Rime《八股文》（LGPL-3.0）輔助")
-                Text("本 App 與教育部無關，不是官方產品。").font(.footnote).foregroundStyle(T.muted)
+                Text("本 App 與教育部無關，不是官方產品。").ffFont(.footnote).foregroundStyle(T.muted)
             }
         }
         .scrollContentBackground(.hidden)
@@ -133,8 +139,8 @@ struct SettingsView: View {
 
     private func credit(_ what: String, _ who: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(what).font(.caption).foregroundStyle(T.muted)
-            Text(who).font(.footnote)
+            Text(what).ffFont(.caption).foregroundStyle(T.muted)
+            Text(who).ffFont(.footnote)
         }
     }
 

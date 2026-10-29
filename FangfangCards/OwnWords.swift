@@ -18,7 +18,7 @@ struct OwnPane: View {
             Section {
                 Button { adding = true } label: {
                     Label("加一個詞", systemImage: "plus.circle.fill")
-                        .font(.headline).foregroundStyle(T.ownInk)
+                        .ffFont(.headline).foregroundStyle(T.ownInk)
                 }
             } footer: {
                 Text("自己加的詞不是教育部辭典的內容，在「轉換」和「詞典」都會用紫色和「自訂」標示。")
@@ -49,8 +49,8 @@ struct OwnPane: View {
     private func row(_ k: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(Dict.hanOf(k)).scaledFont(20, weight: .semibold).foregroundStyle(T.ownInk)
-            Text(dict.codes(Dict.codesOf(k), min(max(rom, 0), 2), -1)).font(T.lat(16)).foregroundStyle(T.greenInk)
-            Text(dict.codes(Dict.codesOf(k), 3, -1)).font(.footnote).foregroundStyle(T.purpleInk)
+            Text(dict.codes(Dict.codesOf(k), min(max(rom, 0), 2), -1)).latFont(16).foregroundStyle(T.greenInk)
+            Text(dict.codes(Dict.codesOf(k), 3, -1)).ffFont(.footnote).foregroundStyle(T.purpleInk)
             Spacer(minLength: 0)
             OwnChip()
         }
@@ -78,7 +78,7 @@ struct AddOwnWordSheet: View {
                 }
                 Section {
                     TextField("例：tshuē-thâu-lōo", text: $reading)
-                        .font(T.lat(17))
+                        .latFont(17)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 } header: {
@@ -94,11 +94,11 @@ struct AddOwnWordSheet: View {
                             Text(han.trimmingCharacters(in: .whitespaces)).scaledFont(24, weight: .semibold).foregroundStyle(T.ownInk)
                             OwnChip()
                         }
-                        Text(dict.codes(cs, 0, -1)).font(T.lat(17)).foregroundStyle(T.greenInk)
-                        Text(dict.codes(cs, 1, -1) + "　" + dict.codes(cs, 2, -1)).font(T.lat(14)).foregroundStyle(T.greenInk.opacity(0.8))
+                        Text(dict.codes(cs, 0, -1)).latFont(17).foregroundStyle(T.greenInk)
+                        Text(dict.codes(cs, 1, -1) + "　" + dict.codes(cs, 2, -1)).latFont(14).foregroundStyle(T.greenInk.opacity(0.8))
                         Text(dict.codes(cs, 3, -1)).foregroundStyle(T.purpleInk)
                     case .problem(let msg):
-                        Text(msg).font(.footnote).foregroundStyle(T.muted)
+                        Text(msg).ffFont(.footnote).foregroundStyle(T.muted)
                     }
                 }
             }

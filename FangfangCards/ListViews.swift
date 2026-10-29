@@ -22,7 +22,7 @@ struct UnknownView: View {
             Section {
                 Button { studying = true } label: {
                     Label("開始練習", systemImage: "graduationcap.fill")
-                        .font(.headline)
+                        .ffFont(.headline)
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .prominentButton(T.greenEdge)
@@ -32,7 +32,7 @@ struct UnknownView: View {
                 .listRowSeparator(.hidden)
                 Button { blanks = true } label: {
                     Label("例句填空", systemImage: "text.badge.checkmark")
-                        .font(.headline)
+                        .ffFont(.headline)
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .softButton()
@@ -41,7 +41,7 @@ struct UnknownView: View {
                 .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
                 Button { toning = true } label: {
                     Label("聲調練習", systemImage: "waveform")
-                        .font(.headline)
+                        .ffFont(.headline)
                         .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .softButton()
@@ -72,9 +72,8 @@ struct UnknownView: View {
         .scrollContentBackground(.hidden)
         .appBackground()
         .searchable(text: $query, prompt: "漢字、羅馬字或意思")
-        .navigationTitle("不熟")
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
-        .sheet(item: $detail) { CardDetail(card: $0).environmentObject(store) }
+
+        .sheet(item: $detail) { CardSheet(card: $0).environmentObject(store) }
         .fullScreenCover(isPresented: $studying) { StudyView().environmentObject(store) }
         .fullScreenCover(isPresented: $blanks) { StudyView(blanksOnly: true).environmentObject(store) }
         .fullScreenCover(isPresented: $toning) { ToneView().environmentObject(store) }
@@ -102,10 +101,8 @@ struct KnownView: View {
             if mode == 0 { review } else { list }
         }
         .appBackground()
-        .navigationTitle("熟悉")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
-        .sheet(item: $detail) { CardDetail(card: $0).environmentObject(store) }
+
+        .sheet(item: $detail) { CardSheet(card: $0).environmentObject(store) }
         .onAppear { if reviewKeys.isEmpty { shuffle() } }
     }
 
@@ -123,7 +120,7 @@ struct KnownView: View {
         let cards = reviewCards
         return VStack(spacing: 14) {
             Text(store.knownCount == 0 ? "" : "\(min(pos, reviewKeys.count)) / \(reviewKeys.count)")
-                .font(.footnote).foregroundStyle(T.muted)
+                .ffFont(.footnote).foregroundStyle(T.muted)
             if cards.isEmpty {
                 Spacer()
                 Text(store.knownCount == 0 ? "在「新詞」往右滑的詞會出現在這裡。" : "這一輪複習完了！")

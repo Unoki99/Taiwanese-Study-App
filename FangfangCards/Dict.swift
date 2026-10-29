@@ -879,7 +879,7 @@ final class Dict: @unchecked Sendable {
     // MARK: sentences with a word (查詞 → 台語句子裡有「…」)
 
     /// an example sentence that uses a word: [漢字, template, 華語, audio], and the entry it's listed under
-    struct SentenceHit: Sendable { let ex: [String]; let entry: String; let word: String }
+    struct SentenceHit: Sendable, Hashable { let ex: [String]; let entry: String; let word: String }
     private var sentenceIndex: [String: [(ex: [String], entry: String)]]? = nil
     private let sentenceLock = NSLock()
 

@@ -4,6 +4,8 @@ import SwiftUI
 struct WordCard: View {
     let card: Card
     var isTop = true
+    @AppStorage(ToneColors.key) private var toneSys = 0
+    @AppStorage(ToneColors.marksKey) private var toneMarks = true
     @AppStorage("rom") private var rom = 0
     @AppStorage("place") private var place = -1
     @AppStorage("hideMeaning") private var hideMeaning = false
@@ -14,26 +16,25 @@ struct WordCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text(card.h)
+                Text(store.cardHan(card, place, base: T.blueInk)).toneGlow()
                     .scaledFont(card.h.count > 3 ? 44 : 60, weight: .medium)
-                    .foregroundStyle(T.blueInk)
                     .lineLimit(1).minimumScaleFactor(0.5)
                 Spacer()
                 CardChips(card: card, place: place)
             }
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.cardRom(card, rom, place)).font(T.lat(26)).foregroundStyle(T.greenInk)
-                    Text(store.cardZy(card, place)).scaledFont(18).foregroundStyle(T.purpleInk)
+                    Text(store.cardRom(card, rom, place)).latFont(26).toneGlow().foregroundStyle(T.greenInk)
+                    Text(store.cardZy(card, place)).scaledFont(18).toneGlow().foregroundStyle(T.purpleInk)
                     if let x = store.alsoSaid(card, rom, place).first {
                         HStack(spacing: 6) {
                             Chip(text: "也講", fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
-                            Text(x.rom).font(T.lat(15)).foregroundStyle(T.greenInk.opacity(0.85))
+                            Text(x.rom).latFont(15).foregroundStyle(T.greenInk.opacity(0.85))
                         }
                     } else if let o = card.o?.first {
                         HStack(spacing: 6) {
                             Chip(text: o.l)
-                            Text(o.r[min(max(rom, 0), 2)]).font(T.lat(15)).foregroundStyle(T.greenInk.opacity(0.85))
+                            Text(o.r[min(max(rom, 0), 2)]).latFont(15).foregroundStyle(T.greenInk.opacity(0.85))
                         }
                     }
                 }
@@ -45,7 +46,7 @@ struct WordCard: View {
             if hideMeaning && !revealed {
                 Spacer()
                 Text("點一下看意思")
-                    .font(.headline).foregroundStyle(T.muted)
+                    .ffFont(.headline).foregroundStyle(T.muted)
                     .frame(maxWidth: .infinity)
                 Spacer()
             } else {
@@ -53,21 +54,26 @@ struct WordCard: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         NumBadge(n: i + 1)
                         if !d.p.isEmpty { Chip(text: d.p) }
-                        Text(d.t).foregroundStyle(T.glyph).lineLimit(3)
+                        Text(d.t).foregroundStyle(T.glyph).lineLimit(card.cardExamples.count > 1 ? 2 : 3)
                     }
                 }
                 if card.d.count > 3 {
-                    Text("還有 \(card.d.count - 3) 個意思").font(.caption).foregroundStyle(T.muted)
+                    Text("還有 \(card.d.count - 3) 個意思").ffFont(.caption).foregroundStyle(T.muted)
                 }
-                if let x = card.firstExample {
+                // two example sentences, from two different meanings when there are (the number = which meaning)
+                let exs = card.cardExamples
+                ForEach(Array(exs.enumerated()), id: \.offset) { _, e in
                     HStack(alignment: .top, spacing: 10) {
-                        PlayButton(path: Audio.examplePath(x.n), size: 28, onCard: true)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(store.exampleHan(card, x, place))
-                            Text(store.exampleRom(card, x, rom, place)).font(T.lat(15)).foregroundStyle(T.greenInk)
-                            Text(x.z).font(.footnote).foregroundStyle(T.muted)
+                        VStack(spacing: 4) {
+                            PlayButton(path: Audio.examplePath(e.x.n), size: 28, onCard: true)
+                            if card.d.count > 1 { NumBadge(n: e.n) }
                         }
-                        .lineLimit(3)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(store.exampleHan(card, e.x, place)).toneGlow()
+                            Text(store.exampleRom(card, e.x, rom, place)).latFont(15).toneGlow().foregroundStyle(T.greenInk)
+                            Text(e.x.z).ffFont(.footnote).foregroundStyle(T.muted)
+                        }
+                        .lineLimit(2)
                     }
                     .padding(.top, 4)
                 }
@@ -77,7 +83,7 @@ struct WordCard: View {
                 Spacer()
                 Button { showDetail = true } label: {
                     Label("詳細", systemImage: "text.book.closed")
-                        .font(.footnote.weight(.semibold))
+                        .ffFont(.footnote, .semibold)
                         .foregroundStyle(T.greenInk)
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .background(.ultraThinMaterial, in: Capsule())
@@ -91,7 +97,7 @@ struct WordCard: View {
         .modifier(CardSurface(frosted: isTop))
         .contentShape(RoundedRectangle(cornerRadius: 28))
         .onTapGesture { revealed.toggle() }
-        .sheet(isPresented: $showDetail) { CardDetail(card: card).environmentObject(store) }
+        .sheet(isPresented: $showDetail) { CardSheet(card: card).environmentObject(store) }
     }
 }
 
@@ -145,7 +151,7 @@ struct CardDetail: View {
                                 CardChips(card: card, place: place)
                                 if let a = card.a { PlayButton(path: Audio.wordPath(a), size: 40) }
                             }
-                            Text(store.cardRom(card, rom, place)).font(T.lat(24)).foregroundStyle(T.greenInk)
+                            Text(store.cardRom(card, rom, place)).latFont(24).foregroundStyle(T.greenInk)
                             Text(store.cardZy(card, place)).scaledFont(17).foregroundStyle(T.purpleInk)
                             // other readings, and the 通行 one when a place is shown
                             ForEach(Array(store.alsoSaid(card, rom, place).enumerated()), id: \.offset) { _, x in
@@ -165,7 +171,7 @@ struct CardDetail: View {
                                 }
                                 .padding(.top, 2)
                             }
-                            Text(statusText).font(.caption).foregroundStyle(T.muted).padding(.top, 4)
+                            Text(statusText).ffFont(.caption).foregroundStyle(T.muted).padding(.top, 4)
                         }
                     }
                     ForEach(Array(card.d.enumerated()), id: \.offset) { i, d in
@@ -182,8 +188,8 @@ struct CardDetail: View {
                                         PlayButton(path: Audio.examplePath(x.n), size: 28)
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(store.exampleHan(card, x, place))
-                                            Text(store.exampleRom(card, x, rom, place)).font(T.lat(15)).foregroundStyle(T.greenInk)
-                                            Text(x.z).font(.footnote).foregroundStyle(T.muted)
+                                            Text(store.exampleRom(card, x, rom, place)).latFont(15).foregroundStyle(T.greenInk)
+                                            Text(x.z).ffFont(.footnote).foregroundStyle(T.muted)
                                         }
                                     }
                                 }
@@ -195,7 +201,7 @@ struct CardDetail: View {
                         Panel { LinkRows(sy: card.sy, an: card.an) }
                     }
                     if card.t == "臺華共同" {
-                        Text("臺華共同詞：意思跟華語一樣。").font(.footnote).foregroundStyle(T.muted)
+                        Text("臺華共同詞：意思跟華語一樣。").ffFont(.footnote).foregroundStyle(T.muted)
                     }
                     HStack(spacing: 12) {
                         Button { store.mark(card, known: false, undoable: false); dismiss() } label: {
@@ -245,11 +251,11 @@ struct WordRow: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(card.h).font(.title3.weight(.medium)).foregroundStyle(T.blueInk)
-                    Text(store.cardRom(card, rom, place)).font(T.lat(16)).foregroundStyle(T.greenInk)
-                    Text(store.cardZy(card, place)).font(.footnote).foregroundStyle(T.purpleInk)
+                    Text(card.h).ffFont(.title3, .medium).foregroundStyle(T.blueInk)
+                    Text(store.cardRom(card, rom, place)).latFont(16).foregroundStyle(T.greenInk)
+                    Text(store.cardZy(card, place)).ffFont(.footnote).foregroundStyle(T.purpleInk)
                 }
-                Text(card.firstMeaning).font(.footnote).foregroundStyle(T.muted).lineLimit(1)
+                Text(card.firstMeaning).ffFont(.footnote).foregroundStyle(T.muted).lineLimit(1)
             }
             Spacer()
             if let s = streak {
@@ -291,8 +297,8 @@ struct OtherRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Chip(text: label)
-            Text(rom).font(T.lat(17)).foregroundStyle(T.greenInk)
-            Text(zy).font(.footnote).foregroundStyle(T.purpleInk)
+            Text(rom).latFont(17).foregroundStyle(T.greenInk)
+            Text(zy).ffFont(.footnote).foregroundStyle(T.purpleInk)
         }
     }
 }
@@ -312,8 +318,29 @@ struct LinkRows: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Chip(text: name, fill: T.blue, edge: T.blueEdge, ink: T.blueInk)
                 Text(list.map { $0.count > 1 && !$0[1].isEmpty ? "\($0[0]) \($0[1])" : $0[0] }.joined(separator: "、"))
-                    .font(.footnote).foregroundStyle(T.glyph.opacity(0.85))
+                    .ffFont(.footnote).foregroundStyle(T.glyph.opacity(0.85))
             }
         }
+    }
+}
+
+
+/// 詳細 / a word from the lists: the dictionary entry in a sheet from the bottom, like everywhere else
+/// (the card's own details until the dictionary has loaded)
+struct CardSheet: View {
+    let card: Card
+    @EnvironmentObject var store: Store
+    var body: some View {
+        Group {
+            if let d = store.dict, d.raw.defs.m[card.k] != nil || d.baseKeys.contains(card.k) {
+                WordEntrySheet(dict: d, key: card.k)
+            } else {
+                CardDetail(card: card)
+                    .presentationDetents([.medium, .large])
+                    .presentationContentInteraction(.scrolls)
+                    .presentationDragIndicator(.visible)
+            }
+        }
+        .onAppear { store.loadDict() }
     }
 }

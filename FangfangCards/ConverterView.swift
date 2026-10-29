@@ -10,11 +10,53 @@ struct DictKey: Hashable, Identifiable {
 /// a category (分類) to list
 struct CatRef: Hashable { let i: Int }
 
+/// 查詞 → 更多: one of the result pages. Opened the same way as a word (a value), so going on to a word
+/// from it and back again keeps the pages in the right order.
+enum MoreRoute: Hashable {
+    case keys(title: String, keys: [String])
+    case sentences(title: String, hits: [Dict.SentenceHit])
+    case places(groups: [PlaceGroup])
+    case wordClass(String)
+    case compare
+}
+struct PlaceRow: Hashable { let han: String; let codes: String; let places: [Int] }
+struct PlaceGroup: Hashable { let zh: String; let rows: [PlaceRow] }
+
 extension View {
     /// where dictionary words and categories open
     func dictDestinations(_ d: Dict) -> some View {
         navigationDestination(for: DictKey.self) { DictEntryView(dict: d, key: $0.k) }
+            .navigationDestination(for: MoreRoute.self) { MorePage(dict: d, route: $0) }
             .navigationDestination(for: CatRef.self) { CategoryWordsView(dict: d, cat: $0.i) }
+    }
+}
+
+extension View {
+    /// a word tapped in an example sentence: on iPhone/iPad a sheet from the bottom (like in 轉換),
+    /// on the Mac a page (sheets there have a fixed size)
+    @ViewBuilder func wordOpener(_ d: Dict, _ item: Binding<DictKey?>) -> some View {
+        #if targetEnvironment(macCatalyst)
+        navigationDestination(item: item) { DictEntryView(dict: d, key: $0.k) }
+        #else
+        sheet(item: item) { WordEntrySheet(dict: d, key: $0.k).environmentObject(Store.shared) }
+        #endif
+    }
+}
+
+/// a dictionary entry in a sheet from the bottom (half height, pull up for more)
+struct WordEntrySheet: View {
+    let dict: Dict
+    let key: String
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        NavigationStack {
+            DictEntryView(dict: dict, key: key)
+                .toolbar { ToolbarItem(placement: .topBarLeading) { Button("完成") { dismiss() } } }
+                .dictDestinations(dict)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationContentInteraction(.scrolls)
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -31,7 +73,7 @@ struct DictGate<Content: View>: View {
             } else {
                 VStack(spacing: 12) {
                     ProgressView()
-                    Text("載入字典…").font(.footnote).foregroundStyle(T.muted)
+                    Text("載入字典…").ffFont(.footnote).foregroundStyle(T.muted)
                 }
             }
         }
@@ -47,9 +89,6 @@ struct DictGate<Content: View>: View {
 struct ConverterView: View {
     var body: some View {
         DictGate { d in ConvertPane(dict: d) }
-            .navigationTitle("轉換")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { RomButton() } }
     }
 }
 
@@ -59,9 +98,6 @@ struct ConverterView: View {
 struct DictionaryView: View {
     var body: some View {
         DictGate { d in DictTabs(dict: d) }
-            .navigationTitle("詞典")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { RomButton() } }
     }
 }
 
@@ -77,6 +113,7 @@ struct DictTabs: View {
                 Text("分類").tag(1)
                 Text("收藏").tag(2)
                 Text("自訂").tag(4)
+                Text("文法").tag(5)
             }
             .pickerStyle(.segmented)
             .padding(.horizontal).padding(.top, 6).padding(.bottom, 4)
@@ -86,6 +123,7 @@ struct DictTabs: View {
                 case 2: SavedPane(dict: dict)
                 case 3: PronunciationPane(dict: dict)
                 case 4: OwnPane(dict: dict)
+                case 5: GrammarPane(dict: dict)
                 default: LookupPane(dict: dict)
                 }
             }
@@ -150,6 +188,8 @@ final class ConvModel: ObservableObject {
 struct ConvertPane: View {
     let dict: Dict
     @EnvironmentObject var store: Store
+    @AppStorage(ToneColors.key) private var toneSys = 0
+    @AppStorage(ToneColors.marksKey) private var toneMarks = true
     @StateObject private var model = ConvModel()
     @AppStorage("rom") private var rom = 0
     @AppStorage("place") private var place = -1
@@ -250,7 +290,7 @@ struct ConvertPane: View {
             .disabled(all)
         }
         Text("點詞可以看意思、換讀音、收藏、加到「不熟」。有底色 = 已收藏或在「不熟」。橘色 = 字典裡找不到，或讀音不太確定（猜對的機會約 80% 以下），點一下可以確認。")
-            .font(.caption).foregroundStyle(T.muted)
+            .ffFont(.caption).foregroundStyle(T.muted)
     }
 
     private var input: some View {
@@ -289,7 +329,7 @@ struct ConvertPane: View {
     private var latinPicker: some View {
         let autoName = ["lat": "皓羅", "tl": "台羅", "poj": "白話字"][model.result.autoLatin] ?? "皓羅"
         return VStack(alignment: .leading, spacing: 4) {
-            Text("羅馬字當作").font(.caption).foregroundStyle(T.muted)
+            Text("羅馬字當作").ffFont(.caption).foregroundStyle(T.muted)
             Picker("羅馬字", selection: $model.latinMode) {
                 Text("自動（\(autoName)）").tag(LatinMode.auto)
                 Text("皓羅").tag(LatinMode.lat)
@@ -302,10 +342,10 @@ struct ConvertPane: View {
 
     private var help: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("例：").font(.footnote.weight(.bold)).foregroundStyle(T.muted)
+            Text("例：").ffFont(.footnote, .bold).foregroundStyle(T.muted)
             ForEach(["我欲去學校讀冊。", "Guá beh khì ha̍k-hāu tha̍k-tsheh.", "ㆣㄨㄚˋ ㄅㆤㆷ ㄎㄧˋ"], id: \.self) { s in
                 Button { model.text = s } label: {
-                    Text(s).font(s.first.map { $0.isASCII } == true ? T.lat(16) : .body)
+                    Group { if s.first.map({ $0.isASCII }) == true { Text(s).latFont(16) } else { Text(s).ffFont(.body) } }
                         .foregroundStyle(T.glyph)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -321,17 +361,17 @@ struct ConvertPane: View {
         let ink = [T.glyph, T.greenInk, T.purpleInk][mode]
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(title).font(.caption.weight(.bold)).foregroundStyle(T.muted)
+                Text(title).ffFont(.caption, .bold).foregroundStyle(T.muted)
                 Spacer()
                 TaigiSpeakButton(text: speechText)
                 Button { copy(mode) } label: {
-                    Image(systemName: copied == mode ? "checkmark" : "doc.on.doc").font(.footnote)
+                    Image(systemName: copied == mode ? "checkmark" : "doc.on.doc").ffFont(.footnote)
                 }
                 .foregroundStyle(T.muted)
             }
-            Text(attributed(pieces, ink: ink, mode: mode))
+            Text(attributed(pieces, ink: ink, mode: mode)).toneGlow()
                 .scaledFont(mode == 0 ? 22 : 20, on: mode != 1)
-                .font(T.lat(19))   // 羅馬字 box (the other boxes set their own size just above)
+                .latFont(19)   // 羅馬字 box (the other boxes set their own size just above)
                 .tint(ink)
                 .lineSpacing(5)
                 .textSelection(.enabled)
@@ -348,7 +388,42 @@ struct ConvertPane: View {
         .glassSurface(RoundedRectangle(cornerRadius: 18))
     }
 
+    /// 聲調顏色 in 轉換: the tone of every syllable of every word, working through the whole text
+    /// (punctuation and line ends close a tone group). item index -> (tokens, tones)
+    private func itemTones() -> [Int: (tokens: [String], tones: [Int])] {
+        let items = model.result.items
+        var units: [ToneUnit] = []
+        var ranges: [Int: (tokens: [String], from: Int, to: Int)] = [:]
+        var prevKey: String? = nil
+        func endPhrase() { if !units.isEmpty { units[units.count - 1].phraseEnd = true } }
+        for (i, it) in items.enumerated() {
+            if it.newline { endPhrase(); continue }
+            if it.space { continue }
+            if let raw = it.raw {
+                if ConvertEngine.isPunct(raw) && !ConvertEngine.openers.contains(raw) { endPhrase() }
+                continue
+            }
+            guard let codes = it.current.codes else { endPhrase(); continue }
+            let key = dict.keyOf(it.current)
+            let tokens: [String]
+            if let key, dict.baseKeys.contains(key), it.current.parent == nil { tokens = dict.tokensFor(key, place) }
+            else { tokens = (it.current.tokens ?? codes.joined(separator: " ")).split(separator: " ").map(String.init) }
+            let u = dict.toneUnits(tokens: tokens, key: key, after: prevKey)
+            prevKey = key
+            // a word that starts with "--" (--ah): the syllable before it keeps its tone
+            if tokens.first == "--", !units.isEmpty { units[units.count - 1].beforeLight = true }
+            // a word that starts with 仔: 仔-sandhi on the syllable before it
+            if it.current.han?.first == "仔", !units.isEmpty { units[units.count - 1].beforeA = true }
+            ranges[i] = (tokens, units.count, units.count + u.count)
+            units += u
+        }
+        endPhrase()
+        let tones = dict.realizedTones(units, place)
+        return ranges.mapValues { (tokens: $0.tokens, tones: Array(tones[$0.from..<$0.to])) }
+    }
+
     private func attributed(_ pieces: [(text: String, item: Int?)], ink: Color, mode: Int) -> AttributedString {
+        if toneSys != 0 { return toneAttributed(pieces, ink: ink, mode: mode) }
         var out = AttributedString()
         for p in pieces {
             var t = p.text
@@ -381,6 +456,32 @@ struct ConvertPane: View {
                         }
                     }
                 }
+            }
+            out += a
+        }
+        return out
+    }
+
+    /// the output in tone colours (words still tappable, choices underlined, saved words shaded)
+    private func toneAttributed(_ pieces: [(text: String, item: Int?)], ink: Color, mode: Int) -> AttributedString {
+        let tones = itemTones()
+        var out = AttributedString()
+        for p in pieces {
+            var t = p.text
+            if t.hasPrefix(" ") { out += AttributedString(" "); t.removeFirst() }
+            guard let i = p.item, i >= 0, let tt = tones[i] else {
+                var a = AttributedString(t)
+                if p.item != nil { a.swiftUI.foregroundColor = .orange }      // not in the dictionary
+                out += a; continue
+            }
+            let it = model.result.items[i]
+            var a: AttributedString
+            if mode == 0 { a = dict.hanToneText(t, tones: tt.tones, system: toneSys, base: ink) }
+            else { a = dict.toneText(tt.tokens, mode == 2 ? 3 : rom, place, tones: tt.tones, system: toneSys) }
+            a.link = URL(string: "ff://w/\(i)")
+            if it.opts.count > 1 { a.swiftUI.underlineStyle = Text.LineStyle(pattern: .dot, color: (it.unsure ? Color.orange : ink).opacity(0.6)) }
+            if let k = dict.keyOf(it.current), store.isSaved(k) || store.cardStatus(k) == 2 {
+                a.swiftUI.backgroundColor = T.olive.opacity(0.85)
             }
             out += a
         }
@@ -473,21 +574,21 @@ struct WordSheet: View {
                                         .scaledFont(30, weight: .semibold)
                                     if it.current.codes != nil {
                                         Text(optText(it.current, 1))
-                                            .font(T.lat(20)).foregroundStyle(T.greenInk)
+                                            .latFont(20).foregroundStyle(T.greenInk)
                                         Text(optText(it.current, 2))
                                             .foregroundStyle(T.purpleInk)
                                     }
                                     if let k = dict.keyOf(it.current), dict.isUser(k) {
                                         HStack(spacing: 8) {
                                             OwnChip()
-                                            Text("你自己加的詞（不是教育部辭典的內容）。").font(.footnote).foregroundStyle(T.muted)
+                                            Text("你自己加的詞（不是教育部辭典的內容）。").ffFont(.footnote).foregroundStyle(T.muted)
                                         }
                                     } else {
-                                        Text("字典裡沒有這個詞。").font(.footnote).foregroundStyle(T.muted)
+                                        Text("字典裡沒有這個詞。").ffFont(.footnote).foregroundStyle(T.muted)
                                         if let h = it.current.han, !h.isEmpty {
                                             Button { addingOwn = true } label: {
                                                 Label("加到「自訂」", systemImage: "plus.circle")
-                                                    .font(.subheadline.weight(.semibold))
+                                                    .ffFont(.subheadline, .semibold)
                                                     .foregroundStyle(T.ownInk)
                                                     .padding(.horizontal, 12).padding(.vertical, 6)
                                                     .background(Capsule().fill(T.own))
@@ -540,10 +641,10 @@ struct WordSheet: View {
     private func options(_ it: ConvItem) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text("選讀音／漢字").font(.caption.weight(.bold)).foregroundStyle(T.muted)
+                Text("選讀音／漢字").ffFont(.caption, .bold).foregroundStyle(T.muted)
                 if let p = it.likely {
                     Text("目前的讀音：猜對的機會約 \(Int((p * 100).rounded()))%")
-                        .font(.caption).foregroundStyle(it.unsure ? Color.orange : T.muted)
+                        .ffFont(.caption).foregroundStyle(it.unsure ? Color.orange : T.muted)
                 }
             }
             ForEach(Array(it.opts.enumerated()), id: \.offset) { i, o in
@@ -558,15 +659,15 @@ struct WordSheet: View {
                                 Text(o.han ?? "—").scaledFont(20, weight: .semibold).foregroundStyle(T.glyph)
                                 if o.codes != nil {
                                     Text(optText(o, 1))
-                                        .font(T.lat(17)).foregroundStyle(T.greenInk)
+                                        .latFont(17).foregroundStyle(T.greenInk)
                                     Text(optText(o, 2))
-                                        .font(.footnote).foregroundStyle(T.purpleInk)
+                                        .ffFont(.footnote).foregroundStyle(T.purpleInk)
                                 }
                                 if let l = o.label { Chip(text: l) }
                                 if let k = dict.keyOf(o), let r = dict.raw.reg[k] { RegChip(reg: r) }
                             }
                             if let g = gloss(o) {
-                                Text(g).font(.footnote).foregroundStyle(T.glyph.opacity(0.75))
+                                Text(g).ffFont(.footnote).foregroundStyle(T.glyph.opacity(0.75))
                                     .lineLimit(2).multilineTextAlignment(.leading)
                             }
                         }
@@ -599,6 +700,8 @@ struct DictEntryView: View {
 struct DictEntryBody: View {
     let dict: Dict
     let key: String
+    @AppStorage(ToneColors.key) private var toneSys = 0
+    @AppStorage(ToneColors.marksKey) private var toneMarks = true
     @EnvironmentObject var store: Store
     @AppStorage("rom") private var rom = 0
     @AppStorage("place") private var place = -1
@@ -626,7 +729,7 @@ struct DictEntryBody: View {
             if let g = dict.gl[key], !g.isEmpty {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Chip(text: "華語", fill: T.fn, edge: T.fnEdge, ink: T.muted)
-                    Text(g.map { $0.t }.joined(separator: "、")).font(.subheadline).foregroundStyle(T.glyph.opacity(0.9))
+                    Text(g.map { $0.t }.joined(separator: "、")).ffFont(.subheadline).foregroundStyle(T.glyph.opacity(0.9))
                 }
             }
             ForEach(dict.senses(key), id: \.n) { s in sense(s) }
@@ -641,11 +744,11 @@ struct DictEntryBody: View {
                 }
             }
             if dict.raw.typ[key] == 1 {
-                Text("臺華共同詞：台語和華語寫法、意思一樣的詞。").font(.caption).foregroundStyle(T.muted)
+                Text("臺華共同詞：台語和華語寫法、意思一樣的詞。").ffFont(.caption).foregroundStyle(T.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .navigationDestination(item: $tapped) { DictEntryView(dict: dict, key: $0.k) }
+        .wordOpener(dict, $tapped)
     }
 
     // MARK: parts
@@ -653,7 +756,7 @@ struct DictEntryBody: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
-                Text(han).scaledFont(34, weight: .semibold).foregroundStyle(dict.isUser(key) ? T.ownInk : T.glyph)
+                Text(dict.hanText(key, place, base: dict.isUser(key) ? T.ownInk : T.glyph)).scaledFont(34, weight: .semibold).toneGlow()
                 if let au = dict.raw.au[key] { PlayButton(path: Audio.wordPath(au)) }
                 Spacer()
             }
@@ -661,8 +764,8 @@ struct DictEntryBody: View {
                 saveButton
                 star
             }
-            Text(dict.wordText(key, rom, place)).font(T.lat(22)).foregroundStyle(T.greenInk).textSelection(.enabled)
-            Text(dict.wordText(key, 3, place)).scaledFont(19).foregroundStyle(T.purpleInk).textSelection(.enabled)
+            Text(dict.wordText(key, rom, place)).toneGlow().latFont(22).foregroundStyle(T.greenInk).textSelection(.enabled)
+            Text(dict.wordText(key, 3, place)).toneGlow().scaledFont(19).foregroundStyle(T.purpleInk).textSelection(.enabled)
             HStack(spacing: 4) {
                 if let r = dict.raw.reg[key] { RegChip(reg: r) }
                 if dict.subst.contains(key) { Chip(text: "替", fill: T.rust, edge: T.rustEdge, ink: T.rustInk) }
@@ -683,7 +786,7 @@ struct DictEntryBody: View {
         let on = store.isSaved(key)
         return Button { withAnimation(.snappy) { store.toggleSaved(key) } } label: {
             Label(on ? "已收藏" : "收藏", systemImage: on ? "bookmark.fill" : "bookmark")
-                .font(.subheadline.weight(.semibold))
+                .ffFont(.subheadline, .semibold)
                 .foregroundStyle(on ? T.oliveInk : T.glyph)
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(Capsule().fill(on ? T.olive : T.fn.opacity(0.8)))
@@ -699,7 +802,7 @@ struct DictEntryBody: View {
             } else {
                 Button { withAnimation(.snappy) { store.toggleUnknown(key) } } label: {
                     Label(st == 2 ? "在「不熟」" : "加到「不熟」", systemImage: st == 2 ? "star.fill" : "star")
-                        .font(.subheadline.weight(.semibold))
+                        .ffFont(.subheadline, .semibold)
                         .foregroundStyle(st == 2 ? T.rustInk : T.glyph)
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(Capsule().fill(st == 2 ? T.rust : T.fn.opacity(0.8)))
@@ -717,7 +820,7 @@ struct DictEntryBody: View {
                 return lab + "：" + list.prefix(4).map { dict.codes($0[0], rom, -1) }.joined(separator: "、")
             }
             let s = [part("人名", dict.raw.names[han]), part("姓", dict.raw.sur[han])].compactMap { $0 }.joined(separator: "　")
-            if !s.isEmpty { Text(s).font(T.lat(14)).foregroundStyle(T.muted) }
+            if !s.isEmpty { Text(s).latFont(14).foregroundStyle(T.muted) }
         }
     }
 
@@ -743,9 +846,9 @@ struct DictEntryBody: View {
                             let k = dict.keyOf(Opt(han: w.han, codes: w.codes.split(separator: " ").map(String.init)))
                             let label = HStack(spacing: 4) {
                                 Text(w.han).foregroundStyle(T.glyph)
-                                Text(dict.codes(w.codes, rom, place)).font(T.lat(13)).foregroundStyle(T.purpleInk)
+                                Text(dict.codes(w.codes, rom, place)).latFont(13).foregroundStyle(T.purpleInk)
                             }
-                            .font(.subheadline)
+                            .ffFont(.subheadline)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Capsule().fill(Color(hex: 0x4c3a5b).opacity(0.6)))
                             if let k, dict.raw.defs.m[k] != nil {
@@ -768,7 +871,7 @@ struct DictEntryBody: View {
                 FlowLayout(spacing: 6) {
                     ForEach(cs.filter { $0 < names.count }, id: \.self) { i in
                         NavigationLink(value: CatRef(i: i)) {
-                            Text(names[i]).font(.subheadline).foregroundStyle(T.pinkInk)
+                            Text(names[i]).ffFont(.subheadline).foregroundStyle(T.pinkInk)
                                 .padding(.horizontal, 8).padding(.vertical, 3)
                                 .background(Capsule().fill(T.pink.opacity(0.6)))
                         }
@@ -784,7 +887,7 @@ struct DictEntryBody: View {
         if !vs.isEmpty {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Chip(text: "異用字", fill: T.fn, edge: T.fnEdge, ink: T.muted)
-                Text(vs.joined(separator: "、")).font(.subheadline).foregroundStyle(T.glyph.opacity(0.9))
+                Text(vs.joined(separator: "、")).ffFont(.subheadline).foregroundStyle(T.glyph.opacity(0.9))
             }
         }
     }
@@ -792,9 +895,9 @@ struct DictEntryBody: View {
     private func sense(_ s: DictSense) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(s.n).").font(.subheadline.weight(.bold)).foregroundStyle(T.muted)
+                Text("\(s.n).").ffFont(.subheadline, .bold).foregroundStyle(T.muted)
                 if !s.pos.isEmpty { Chip(text: s.pos, fill: T.fn, edge: T.fnEdge, ink: T.muted) }
-                Text(s.text).font(.body).foregroundStyle(T.glyph).textSelection(.enabled)
+                Text(s.text).ffFont(.body).foregroundStyle(T.glyph).textSelection(.enabled)
             }
             ForEach(Array(s.ex.enumerated()), id: \.offset) { _, e in
                 ExampleBlock(dict: dict, ex: e, own: key, onWord: { tapped = DictKey(k: $0) })
@@ -822,9 +925,9 @@ struct DictEntryBody: View {
                         NavigationLink(value: DictKey(k: k)) {
                             HStack(spacing: 4) {
                                 Text(Dict.hanOf(k)).foregroundStyle(T.glyph)
-                                Text(dict.wordText(k, rom, place)).font(T.lat(13)).foregroundStyle(ink)
+                                Text(dict.wordText(k, rom, place)).latFont(13).foregroundStyle(ink)
                             }
-                            .font(.subheadline)
+                            .ffFont(.subheadline)
                             .padding(.horizontal, 8).padding(.vertical, 3)
                             .background(Capsule().fill(fill.opacity(0.5)))
                         }
@@ -873,9 +976,10 @@ struct LookupResult: Sendable {
     var gloss: [String] = []
     var defs: [String] = []
     var places: [(zh: String, rows: [(han: String, codes: String, places: [Int])])] = []
+    var tones: [String] = []                  // words with a tone pattern (4-5)
     var sentences: [Dict.SentenceHit] = []    // example sentences that use the 台語 word(s) found
     var sentenceWords: [String] = []          // …those words (漢字), for the title
-    var empty: Bool { taigi.isEmpty && contains.isEmpty && pattern.isEmpty && patternZh.isEmpty && exact.isEmpty && gloss.isEmpty && defs.isEmpty && places.isEmpty }
+    var empty: Bool { tones.isEmpty && taigi.isEmpty && contains.isEmpty && pattern.isEmpty && patternZh.isEmpty && exact.isEmpty && gloss.isEmpty && defs.isEmpty && places.isEmpty }
 }
 
 enum Lookup {
@@ -976,6 +1080,11 @@ enum Lookup {
         var r = LookupResult()
         guard !q.isEmpty else { return r }
         if q.contains(where: { "*＊?？".contains($0) }) { return wildcard(d, q) }
+        // a tone pattern: 4-5, 45, 4 5 (1–8 syllables)
+        if q.range(of: #"^[1-9](?:[-\s]?[1-9]){0,7}$"#, options: .regularExpression) != nil {
+            r.tones = toneSearch(d, q.filter { $0.isNumber }.compactMap { $0.wholeNumberValue })
+            return r
+        }
         if q.unicodeScalars.contains(where: { ConvertEngine.isZy($0.value) || ConvertEngine.isLatinLetter($0.value) }) {
             r.taigi = taigi(d, q)
             addSentences(d, &r, r.taigi)
@@ -1026,6 +1135,19 @@ enum Lookup {
         return r
     }
 
+    /// words whose syllables have exactly these tones (as written in the dictionary), most common first
+    static func toneSearch(_ d: Dict, _ tones: [Int]) -> [String] {
+        var out: [(k: String, s: Double)] = []
+        for w in d.raw.words where w.count == 2 {
+            let cs = w[1].split(separator: " ")
+            guard cs.count == tones.count, w[0].count == tones.count else { continue }
+            if zip(cs, tones).allSatisfy({ $0.0.last?.wholeNumberValue == $0.1 }) {
+                out.append((w[0] + "\t" + w[1], d.score(w[0], w[1])))
+            }
+        }
+        return out.sorted { $0.s > $1.s }.prefix(1000).map { $0.k }
+    }
+
     /// 台語句子裡有「…」: example sentences using the 台語 word(s) found (the first few)
     static func addSentences(_ d: Dict, _ r: inout LookupResult, _ keys: [String]) {
         var ks: [String] = []
@@ -1057,6 +1179,22 @@ struct LookupPane: View {
                     .scaledFont(18)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
+                DisclosureGroup {
+                    ForEach(WordClassPage.classes, id: \.self) { c in
+                        NavigationLink(value: MoreRoute.wordClass(c)) {
+                            HStack {
+                                Text(c).foregroundStyle(c == "離合詞" ? T.pinkInk : T.glyph)
+                                Spacer()
+                                Text("\(dict.wordClassCount(c))").ffFont(.footnote, mono: true).foregroundStyle(T.muted)
+                            }
+                        }
+                    }
+                } label: {
+                    Label("依詞類列出", systemImage: "list.bullet.indent").foregroundStyle(T.oliveInk)
+                }
+                NavigationLink(value: MoreRoute.compare) {
+                    Label("比較兩個詞", systemImage: "rectangle.split.2x1").foregroundStyle(T.oliveInk)
+                }
             }
             .listRowBackground(T.fn.opacity(0.7))
             if !query.isEmpty && result.empty {
@@ -1066,8 +1204,11 @@ struct LookupPane: View {
                 group("台語詞「\(query)」（\(result.pattern.count == 300 ? "300+" : String(result.pattern.count))）", result.pattern)
                 group("華語「\(query)」的台語講法", result.patternZh)
             } else if query.isEmpty {
-                Text("可以查華語、台語漢字、皓羅／台羅／白話字（聲調可以不打，例如 tsiah png）或方音。\n往右滑一個詞加到「不熟」，往左滑收藏。\n* 代表一個以上的字，? 代表剛好一個字：\n人* → 人開頭的詞　*仔 → 仔結尾　*水* → 水在中間　?仔 → 兩個字、仔結尾")
-                    .font(.footnote).foregroundStyle(T.muted).listRowBackground(Color.clear)
+                Text("可以查華語、台語漢字、皓羅／台羅／白話字（聲調可以不打，例如 tsiah png）或方音。\n往右滑一個詞加到「不熟」，往左滑收藏。\n* 代表一個以上的字，? 代表剛好一個字：\n人* → 人開頭的詞　*仔 → 仔結尾　*水* → 水在中間　?仔 → 兩個字、仔結尾\n打聲調數字找聲調組合：4-5、2 2、817…")
+                    .ffFont(.footnote).foregroundStyle(T.muted).listRowBackground(Color.clear)
+            }
+            if !result.tones.isEmpty {
+                group("聲調「\(query.filter { $0.isNumber }.map(String.init).joined(separator: "-"))」（\(result.tones.count >= 1000 ? "1000+" : String(result.tones.count))）", result.tones)
             }
             group("台語「\(query)」", result.taigi)
             group("台語講法", result.exact)
@@ -1091,33 +1232,31 @@ struct LookupPane: View {
         if !r.sentences.isEmpty || !r.contains.isEmpty || !r.places.isEmpty || !r.gloss.isEmpty || !r.defs.isEmpty {
             Section {
                 if !r.sentences.isEmpty {
-                    NavigationLink {
-                        SentencesPage(dict: dict, title: "台語句子裡有「\(words)」", hits: r.sentences)
-                    } label: { moreRow("text.quote", "台語句子裡有「\(words)」", r.sentences.count, cap: 300) }
+                    NavigationLink(value: MoreRoute.sentences(title: "台語句子裡有「\(words)」", hits: r.sentences)) {
+                        moreRow("text.quote", "台語句子裡有「\(words)」", r.sentences.count, cap: 300)
+                    }
                 }
                 if !r.contains.isEmpty {
-                    NavigationLink { keysPage("台語詞裡有「\(query)」", r.contains) }
-                        label: { moreRow("character.textbox", "台語詞裡有「\(query)」", r.contains.count, cap: 80) }
+                    NavigationLink(value: MoreRoute.keys(title: "台語詞裡有「\(query)」", keys: r.contains)) {
+                        moreRow("character.textbox", "台語詞裡有「\(query)」", r.contains.count, cap: 80)
+                    }
                 }
                 if !r.places.isEmpty {
-                    NavigationLink {
-                        List {
-                            ForEach(Array(r.places.enumerated()), id: \.offset) { _, e in placesBlock(e) }
-                                .listRowBackground(T.fn.opacity(0.7))
-                        }
-                        .scrollContentBackground(.hidden)
-                        .appBackground()
-                        .navigationTitle("各地講法")
-                        .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
-                    } label: { moreRow("map", "各地講法", r.places.count, cap: 6) }
+                    NavigationLink(value: MoreRoute.places(groups: r.places.map { e in
+                        PlaceGroup(zh: e.zh, rows: e.rows.map { PlaceRow(han: $0.han, codes: $0.codes, places: $0.places) })
+                    })) {
+                        moreRow("map", "各地講法", r.places.count, cap: 6)
+                    }
                 }
                 if !r.gloss.isEmpty {
-                    NavigationLink { keysPage("華語意思有「\(query)」", r.gloss) }
-                        label: { moreRow("text.magnifyingglass", "華語意思有「\(query)」", r.gloss.count, cap: 60) }
+                    NavigationLink(value: MoreRoute.keys(title: "華語意思有「\(query)」", keys: r.gloss)) {
+                        moreRow("text.magnifyingglass", "華語意思有「\(query)」", r.gloss.count, cap: 60)
+                    }
                 }
                 if !r.defs.isEmpty {
-                    NavigationLink { keysPage("解釋裡有「\(query)」", r.defs) }
-                        label: { moreRow("book", "解釋裡有「\(query)」", r.defs.count, cap: 60) }
+                    NavigationLink(value: MoreRoute.keys(title: "解釋裡有「\(query)」", keys: r.defs)) {
+                        moreRow("book", "解釋裡有「\(query)」", r.defs.count, cap: 60)
+                    }
                 }
             } header: {
                 Text("更多")
@@ -1131,17 +1270,8 @@ struct LookupPane: View {
             Image(systemName: icon).foregroundStyle(T.oliveInk).frame(width: 22)
             Text(title).foregroundStyle(T.glyph).lineLimit(1)
             Spacer(minLength: 6)
-            Text(n >= cap ? "\(cap)+" : "\(n)").font(.subheadline.monospacedDigit()).foregroundStyle(T.muted)
+            Text(n >= cap ? "\(cap)+" : "\(n)").ffFont(.subheadline, mono: true).foregroundStyle(T.muted)
         }
-    }
-
-    private func keysPage(_ title: String, _ keys: [String]) -> some View {
-        List { group("", keys) }
-            .scrollContentBackground(.hidden)
-            .appBackground()
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
     }
 
     private func search() {
@@ -1156,7 +1286,66 @@ struct LookupPane: View {
         }
     }
 
-    @ViewBuilder private func group(_ title: String, _ keys: [String]) -> some View {
+    private func group(_ title: String, _ keys: [String]) -> some View {
+        KeyListSection(dict: dict, title: title, keys: keys)
+    }
+
+    private func row(_ k: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(Dict.hanOf(k)).scaledFont(20, weight: .semibold).foregroundStyle(T.glyph)
+                Text(dict.wordText(k, rom, place)).latFont(16).foregroundStyle(T.greenInk)
+                Text(dict.wordText(k, 3, place)).ffFont(.footnote).foregroundStyle(T.purpleInk)
+                if let r = dict.raw.reg[k] { RegChip(reg: r) }
+            }
+            if let g = dict.gl[k], !g.isEmpty {
+                Text(g.map { $0.t }.joined(separator: "、")).ffFont(.footnote).foregroundStyle(T.muted).lineLimit(1)
+            } else if let t = dict.defText(k) {
+                Text(t.replacingOccurrences(of: "\n", with: " ")).ffFont(.footnote).foregroundStyle(T.muted).lineLimit(2)
+            }
+        }
+    }
+}
+
+/// 查詞 → 更多 → a page of words, sentences or 各地講法
+struct MorePage: View {
+    let dict: Dict
+    let route: MoreRoute
+    var body: some View {
+        switch route {
+        case .sentences(let title, let hits):
+            SentencesPage(dict: dict, title: title, hits: hits)
+        case .keys(let title, let keys):
+            List { KeyListSection(dict: dict, title: "", keys: keys) }
+                .scrollContentBackground(.hidden)
+                .appBackground()
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
+        case .wordClass(let c):
+            WordClassPage(dict: dict, cls: c)
+        case .compare:
+            ComparePage(dict: dict)
+        case .places(let groups):
+            List {
+                ForEach(Array(groups.enumerated()), id: \.offset) { _, g in PlacesBlockView(dict: dict, e: g) }
+                    .listRowBackground(T.fn.opacity(0.7))
+            }
+            .scrollContentBackground(.hidden)
+            .appBackground()
+            .navigationTitle("各地講法")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
+        }
+    }
+}
+
+/// a list of words (swipe right = 加到不熟, left = 收藏)
+struct KeyListSection: View {
+    let dict: Dict
+    let title: String
+    let keys: [String]
+    @EnvironmentObject var store: Store
+    var body: some View {
         if !keys.isEmpty {
             Section(title) {
                 ForEach(keys, id: \.self) { k in
@@ -1178,26 +1367,17 @@ struct LookupPane: View {
             .listRowBackground(T.fn.opacity(0.7))
         }
     }
+}
 
-    private func row(_ k: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Dict.hanOf(k)).scaledFont(20, weight: .semibold).foregroundStyle(T.glyph)
-                Text(dict.wordText(k, rom, place)).font(T.lat(16)).foregroundStyle(T.greenInk)
-                Text(dict.wordText(k, 3, place)).font(.footnote).foregroundStyle(T.purpleInk)
-                if let r = dict.raw.reg[k] { RegChip(reg: r) }
-            }
-            if let g = dict.gl[k], !g.isEmpty {
-                Text(g.map { $0.t }.joined(separator: "、")).font(.footnote).foregroundStyle(T.muted).lineLimit(1)
-            } else if let t = dict.defText(k) {
-                Text(t.replacingOccurrences(of: "\n", with: " ")).font(.footnote).foregroundStyle(T.muted).lineLimit(2)
-            }
-        }
-    }
-
-    private func placesBlock(_ e: (zh: String, rows: [(han: String, codes: String, places: [Int])])) -> some View {
+/// one 各地講法 meaning: the words each place uses for it
+struct PlacesBlockView: View {
+    let dict: Dict
+    let e: PlaceGroup
+    @AppStorage("rom") private var rom = 0
+    @AppStorage("place") private var place = -1
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(e.zh).font(.headline).foregroundStyle(T.pinkInk)
+            Text(e.zh).ffFont(.headline).foregroundStyle(T.pinkInk)
                 .padding(.horizontal, 10).padding(.vertical, 3)
                 .background(RoundedRectangle(cornerRadius: 8).fill(T.pink))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(T.pinkEdge, lineWidth: 1.5))
@@ -1206,11 +1386,11 @@ struct LookupPane: View {
                 let content = VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(row.han).scaledFont(18, weight: .semibold).foregroundStyle(T.glyph)
-                        Text(dict.codes(row.codes, rom, -1)).font(T.lat(15)).foregroundStyle(T.greenInk)
-                        Text(dict.codes(row.codes, 3, row.places.first ?? -1)).font(.footnote).foregroundStyle(T.purpleInk)
+                        Text(dict.codes(row.codes, rom, -1)).latFont(15).foregroundStyle(T.greenInk)
+                        Text(dict.codes(row.codes, 3, row.places.first ?? -1)).ffFont(.footnote).foregroundStyle(T.purpleInk)
                     }
                     Text(row.places.compactMap { $0 < dict.raw.places.count ? dict.raw.places[$0] : nil }.joined(separator: "、"))
-                        .font(.caption).foregroundStyle(row.places.contains(place) ? T.oliveInk : T.muted)
+                        .ffFont(.caption).foregroundStyle(row.places.contains(place) ? T.oliveInk : T.muted)
                 }
                 if let key, dict.raw.defs.m[key] != nil {
                     NavigationLink(value: DictKey(k: key)) { content }
@@ -1239,6 +1419,8 @@ struct ExampleBlock: View {
     @State private var swapZh: String?                    // …and the 華語 translation of its sentence
     @AppStorage("ff-swaps") private var swapsJSON = ""     // your choices (redraws when they change)
     @AppStorage("ff-swap-off") private var swapOffJSON = "" // sentences with the 在地詞 switch off
+    @AppStorage(ToneColors.key) private var toneSys = 0
+    @AppStorage(ToneColors.marksKey) private var toneMarks = true
 
     var body: some View {
         let e = ex
@@ -1247,10 +1429,10 @@ struct ExampleBlock: View {
                 if e.count > 1 {
                     exampleWordsView(e[0], e[1], zh: e.count > 2 ? e[2] : nil)
                 } else {
-                    Text(e[0]).font(.body).foregroundStyle(T.glyph).textSelection(.enabled)
+                    Text(e[0]).ffFont(.body).foregroundStyle(T.glyph).textSelection(.enabled)
                 }
-                if e.count > 1 { Text(dict.sentenceText(e[1], rom, place: place, han: e[0], zh: e.count > 2 ? e[2] : nil)).font(T.lat(15)).foregroundStyle(T.greenInk).textSelection(.enabled) }
-                if e.count > 2, !e[2].isEmpty { Text(e[2]).font(.footnote).foregroundStyle(T.muted).textSelection(.enabled) }
+                if e.count > 1 { Text(dict.sentenceText(e[1], rom, place: place, han: e[0], zh: e.count > 2 ? e[2] : nil)).toneGlow().latFont(15).foregroundStyle(T.greenInk).textSelection(.enabled) }
+                if e.count > 2, !e[2].isEmpty { Text(e[2]).ffFont(.footnote).foregroundStyle(T.muted).textSelection(.enabled) }
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 8) {
@@ -1297,7 +1479,7 @@ struct ExampleBlock: View {
             let on = !dict.swapsOff().contains(k)
             VStack(alignment: .trailing, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text("在地詞").font(.caption.weight(.bold)).foregroundStyle(on ? T.pinkInk : T.muted)
+                    Text("在地詞").ffFont(.caption, .bold).foregroundStyle(on ? T.pinkInk : T.muted)
                     Toggle("在地詞", isOn: Binding(get: { on }, set: { setSwapOn(k, $0) }))
                         .labelsHidden()
                         .toggleStyle(.switch)
@@ -1324,9 +1506,9 @@ struct ExampleBlock: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text("選詞")
-                            Image(systemName: "chevron.down").font(.caption2.weight(.bold))
+                            Image(systemName: "chevron.down").ffFont(.caption2, .bold)
                         }
-                        .font(.caption.weight(.semibold))
+                        .ffFont(.caption, .semibold)
                         .foregroundStyle(T.pinkInk)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(T.pink))
@@ -1382,33 +1564,43 @@ struct ExampleBlock: View {
 
     /// the example's 漢字, word by word: the whole word (with a little room around it) is the button
     private func exampleWordsView(_ han0: String, _ tpl0: String, zh: String?) -> some View {
-        let _ = swapsJSON + swapOffJSON          // redraw when a choice or the switch changes
-        return FlowLayout(spacing: 0, lineSpacing: 2) {
-            ForEach(Array(examplePiecesHan(han0, tpl0, zh: zh).enumerated()), id: \.offset) { _, p in
+        let _ = swapsJSON + swapOffJSON + "\(toneSys)\(toneMarks)"   // redraw when a choice or a switch changes
+        // 聲調顏色: the tone of every syllable, and where each piece starts
+        let tones: [Int]? = toneSys != 0 ? dict.exampleTones(han0, tpl0, place: place, zh: zh).tones : nil
+        let pieces = examplePiecesHan(han0, tpl0, zh: zh)
+        var starts: [Int] = [], n = 0
+        for p in pieces { starts.append(n); n += p.text.unicodeScalars.filter { ConvertEngine.isHan($0.value) }.count }
+        func colored(_ i: Int, _ ink: Color) -> AttributedString {
+            guard let tones else { var a = AttributedString(pieces[i].text); a.swiftUI.foregroundColor = ink; return a }
+            return dict.hanToneText(pieces[i].text, tones: Array(tones.dropFirst(starts[i])), system: toneSys, base: ink)
+        }
+        return FlowLayout(spacing: 0, lineSpacing: -4) {     // taller boxes, lines as close as before
+            ForEach(Array(pieces.enumerated()), id: \.offset) { i, p in
                 if let orig = p.swapOf {
                     Button { swapWord = orig; swapZh = zh } label: {
-                        wordLabel(p.text, ink: p.swapped ? T.swapInk : T.glyph, line: T.swapInk.opacity(0.8))
+                        wordLabel(colored(i, p.swapped ? T.swapInk : T.glyph), line: T.swapInk.opacity(0.8))
                     }
                     .buttonStyle(.plain)
                 } else if let k = p.key, k != own {
                     Button { onWord(k) } label: {
-                        wordLabel(p.text, ink: T.blueInk, line: T.blueInk.opacity(0.45))
+                        wordLabel(colored(i, T.blueInk), line: T.blueInk.opacity(0.45))
                     }
                     .buttonStyle(.plain)
                 } else {
-                    Text(p.text).font(.body).foregroundStyle(p.key != nil && p.key == own ? T.oliveInk : T.glyph)
-                        .padding(.vertical, 4).padding(.horizontal, 1)
+                    Text(colored(i, p.key != nil && p.key == own ? T.oliveInk : T.glyph)).toneGlow().ffFont(.body)
+                        .padding(.vertical, 7).padding(.horizontal, 2)
                         .background(RoundedRectangle(cornerRadius: 4).fill(boxedOwn && p.key != nil && p.key == own ? T.olive.opacity(0.6) : .clear))
                 }
             }
         }
     }
 
-    private func wordLabel(_ t: String, ink: Color, line: Color) -> some View {
-        Text(t).font(.body).foregroundStyle(ink)
-            .underline(true, pattern: .dot, color: line)
-            .padding(.vertical, 4).padding(.horizontal, 1)
+    /// a tappable word: no underline (it swells under the pointer instead); the whole padded box reacts
+    private func wordLabel(_ t: AttributedString, line: Color) -> some View {
+        Text(t).ffFont(.body).toneGlow()
+            .padding(.vertical, 7).padding(.horizontal, 2)
             .contentShape(Rectangle())
+            .modifier(HoverSwell())
     }
 
 }
@@ -1419,11 +1611,12 @@ struct SentencesPage: View {
     let title: String
     let hits: [Dict.SentenceHit]
     @State private var tapped: DictKey?
+    @State private var openEntry: DictKey?
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
-                Text("\(hits.count) 句，短的在前面").font(.caption).foregroundStyle(T.muted)
+                Text("\(hits.count) 句，短的在前面").ffFont(.caption).foregroundStyle(T.muted)
                 ForEach(Array(hits.enumerated()), id: \.offset) { _, h in card(h) }
             }
             .padding()
@@ -1434,7 +1627,8 @@ struct SentencesPage: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
-        .navigationDestination(item: $tapped) { DictEntryView(dict: dict, key: $0.k) }
+        .wordOpener(dict, $tapped)
+        .navigationDestination(item: $openEntry) { DictEntryView(dict: dict, key: $0.k) }
     }
 
     private func card(_ h: Dict.SentenceHit) -> some View {
@@ -1445,9 +1639,9 @@ struct SentencesPage: View {
                 HStack(spacing: 4) {
                     Text("出自").foregroundStyle(T.muted)
                     Text(Dict.hanOf(h.entry)).foregroundStyle(T.blueInk)
-                    Image(systemName: "chevron.right").font(.caption2.weight(.bold)).foregroundStyle(T.muted)
+                    Image(systemName: "chevron.right").ffFont(.caption2, .bold).foregroundStyle(T.muted)
                 }
-                .font(.caption)
+                .ffFont(.caption)
             }
             .buttonStyle(.plain)
             .padding(.top, 2)
@@ -1455,6 +1649,9 @@ struct SentencesPage: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 14).fill(T.fn.opacity(0.55)))
+        // anywhere on the card (except its own buttons) opens the entry the sentence comes from
+        .contentShape(RoundedRectangle(cornerRadius: 14))
+        .onTapGesture { openEntry = DictKey(k: h.entry) }
     }
 }
 
@@ -1472,12 +1669,24 @@ struct SavedPane: View {
         List {
             if keys.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("還沒有收藏", systemImage: "bookmark").font(.headline).foregroundStyle(T.glyph)
+                    Label("還沒有收藏", systemImage: "bookmark").ffFont(.headline).foregroundStyle(T.glyph)
                     Text("在「轉換」點一個詞，或在「華語 → 台語」打開一個詞，按「收藏」就會存在這裡。")
-                        .font(.footnote).foregroundStyle(T.muted)
+                        .ffFont(.footnote).foregroundStyle(T.muted)
                 }
                 .listRowBackground(Color.clear)
             } else {
+                // export (here rather than in the top bar, so the top bar is the same on every page)
+                Menu {
+                    Button { share(Data(store.savedCSV(dict).utf8), "方方-收藏.csv") } label: {
+                        Label("匯出 CSV（Anki）", systemImage: "tablecells")
+                    }
+                    Button { share(Data(keys.map { Dict.hanOf($0) + "\t" + dict.word($0, rom, -1) }.joined(separator: "\n").utf8), "方方-收藏.txt") } label: {
+                        Label("匯出文字", systemImage: "doc.plaintext")
+                    }
+                } label: {
+                    Label("匯出收藏", systemImage: "square.and.arrow.up").foregroundStyle(T.oliveInk)
+                }
+                .listRowBackground(T.fn.opacity(0.7))
                 Section {
                     ForEach(keys, id: \.self) { k in
                         NavigationLink(value: DictKey(k: k)) { row(k) }
@@ -1500,20 +1709,6 @@ struct SavedPane: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .toolbar {
-            if !keys.isEmpty {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button { share(Data(store.savedCSV(dict).utf8), "方方-收藏.csv") } label: {
-                            Label("匯出 CSV（Anki）", systemImage: "tablecells")
-                        }
-                        Button { share(Data(keys.map { Dict.hanOf($0) + "\t" + dict.word($0, rom, -1) }.joined(separator: "\n").utf8), "方方-收藏.txt") } label: {
-                            Label("匯出文字", systemImage: "doc.plaintext")
-                        }
-                    } label: { Image(systemName: "square.and.arrow.up") }
-                }
-            }
-        }
         .sheet(item: $shareItem) { ShareSheet(url: $0.url) }
     }
 
@@ -1521,15 +1716,15 @@ struct SavedPane: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(Dict.hanOf(k)).scaledFont(20, weight: .semibold).foregroundStyle(T.glyph)
-                Text(dict.wordText(k, rom, place)).font(T.lat(16)).foregroundStyle(T.greenInk)
-                Text(dict.wordText(k, 3, place)).font(.footnote).foregroundStyle(T.purpleInk)
+                Text(dict.wordText(k, rom, place)).latFont(16).foregroundStyle(T.greenInk)
+                Text(dict.wordText(k, 3, place)).ffFont(.footnote).foregroundStyle(T.purpleInk)
                 Spacer(minLength: 0)
-                if store.cardStatus(k) == 2 { Image(systemName: "star.fill").font(.caption).foregroundStyle(T.rustInk) }
+                if store.cardStatus(k) == 2 { Image(systemName: "star.fill").ffFont(.caption).foregroundStyle(T.rustInk) }
             }
             if let g = dict.gl[k], !g.isEmpty {
-                Text(g.map { $0.t }.joined(separator: "、")).font(.footnote).foregroundStyle(T.muted).lineLimit(1)
+                Text(g.map { $0.t }.joined(separator: "、")).ffFont(.footnote).foregroundStyle(T.muted).lineLimit(1)
             } else if let t = dict.defText(k) {
-                Text(t.replacingOccurrences(of: "\n", with: " ")).font(.footnote).foregroundStyle(T.muted).lineLimit(2)
+                Text(t.replacingOccurrences(of: "\n", with: " ")).ffFont(.footnote).foregroundStyle(T.muted).lineLimit(2)
             }
         }
     }
@@ -1560,7 +1755,7 @@ struct CategoryPane: View {
                         HStack {
                             Text(names[i]).foregroundStyle(T.glyph)
                             Spacer()
-                            Text("\(counts[i, default: 0])").font(.footnote).foregroundStyle(T.muted)
+                            Text("\(counts[i, default: 0])").ffFont(.footnote).foregroundStyle(T.muted)
                         }
                     }
                 }
@@ -1624,28 +1819,30 @@ struct CategoryWordsView: View {
 struct DictRow: View {
     let dict: Dict
     let key: String
+    @AppStorage(ToneColors.key) private var toneSys = 0
+    @AppStorage(ToneColors.marksKey) private var toneMarks = true
     @EnvironmentObject var store: Store
     @AppStorage("rom") private var rom = 0
     @AppStorage("place") private var place = -1
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(Dict.hanOf(key)).scaledFont(20, weight: .semibold).foregroundStyle(dict.isUser(key) ? T.ownInk : T.glyph)
-                Text(dict.wordText(key, rom, place)).font(T.lat(16)).foregroundStyle(T.greenInk)
-                Text(dict.wordText(key, 3, place)).font(.footnote).foregroundStyle(T.purpleInk)
+                Text(dict.hanText(key, place, base: dict.isUser(key) ? T.ownInk : T.glyph)).scaledFont(20, weight: .semibold).toneGlow()
+                Text(dict.wordText(key, rom, place)).toneGlow().latFont(16).foregroundStyle(T.greenInk)
+                Text(dict.wordText(key, 3, place)).toneGlow().ffFont(.footnote).foregroundStyle(T.purpleInk)
                 Spacer(minLength: 0)
                 if dict.isUser(key) { OwnChip() }
-                if store.isSaved(key) { Image(systemName: "bookmark.fill").font(.caption).foregroundStyle(T.oliveInk) }
+                if store.isSaved(key) { Image(systemName: "bookmark.fill").ffFont(.caption).foregroundStyle(T.oliveInk) }
                 switch store.cardStatus(key) {
-                case 2: Image(systemName: "star.fill").font(.caption).foregroundStyle(T.rustInk)
-                case 1: Image(systemName: "checkmark.circle.fill").font(.caption).foregroundStyle(T.greenInk)
+                case 2: Image(systemName: "star.fill").ffFont(.caption).foregroundStyle(T.rustInk)
+                case 1: Image(systemName: "checkmark.circle.fill").ffFont(.caption).foregroundStyle(T.greenInk)
                 default: EmptyView()
                 }
             }
             if let g = dict.gl[key], !g.isEmpty {
-                Text(g.map { $0.t }.joined(separator: "、")).font(.footnote).foregroundStyle(T.muted).lineLimit(1)
+                Text(g.map { $0.t }.joined(separator: "、")).ffFont(.footnote).foregroundStyle(T.muted).lineLimit(1)
             } else if let t = dict.defText(key) {
-                Text(t.replacingOccurrences(of: "\n", with: " ")).font(.footnote).foregroundStyle(T.muted).lineLimit(2)
+                Text(t.replacingOccurrences(of: "\n", with: " ")).ffFont(.footnote).foregroundStyle(T.muted).lineLimit(2)
             }
         }
     }
@@ -1656,6 +1853,8 @@ struct DictRow: View {
 extension Dict {
     /// 羅馬字 of an example; readings guessed by rule (not stated by the dictionary) are red
     func sentenceText(_ tpl: String, _ sys: Int, place: Int, han: String, zh: String? = nil, ink: Color = T.greenInk) -> AttributedString {
+        let ts = ToneColors.system
+        if ts != 0 { return sentenceToneText(han, tpl, sys, place: place, zh: zh, system: ts) }   // 聲調顏色
         var out = AttributedString()
         for p in examplePieces(tpl, sys, place: place, han: han, zh: zh) {
             var a = AttributedString(p.text)
@@ -1668,6 +1867,8 @@ extension Dict {
 
     /// an example's 漢字 for a place: words the place says differently swapped in, in pink
     func exampleHanText(_ han: String, _ tpl: String, place: Int, zh: String?, base: Color) -> AttributedString {
+        let ts = ToneColors.system
+        if ts != 0 { return sentenceHanToneText(han, tpl, place: place, zh: zh, system: ts, base: base) }
         guard place >= 0 else { var a = AttributedString(han); a.swiftUI.foregroundColor = base; return a }
         let loc = localizedExample(han, tpl, place, zh: zh)
         var out = AttributedString()
@@ -1684,7 +1885,7 @@ extension Dict {
 struct GuessNote: View {
     var body: some View {
         Text("紅色 = 推測的讀音（辭典沒有寫這個地方怎麼唸這個詞，照規則推出來的）")
-            .font(.caption2).foregroundStyle(T.muted)
+            .ffFont(.caption2).foregroundStyle(T.muted)
     }
 }
 
@@ -1702,7 +1903,16 @@ func guessColored(_ pieces: [(text: String, guessed: Bool)], ink: Color? = nil, 
 extension Dict {
     /// a word's reading with guessed place readings in red
     func wordText(_ key: String, _ sys: Int, _ place: Int) -> AttributedString {
-        guessColored(wordPieces(key, sys, place))
+        let ts = ToneColors.system
+        if ts != 0 { return wordToneText(key, sys, place, system: ts) }       // 聲調顏色
+        return guessColored(wordPieces(key, sys, place))
+    }
+    /// a word's 漢字: in tone colours when 聲調顏色 is on, else in `base`
+    func hanText(_ key: String, _ place: Int, base: Color) -> AttributedString {
+        let ts = ToneColors.system
+        if ts != 0 { return wordHanToneText(key, place, system: ts, base: base) }
+        var a = AttributedString(Dict.hanOf(key)); a.swiftUI.foregroundColor = base
+        return a
     }
 }
 
@@ -1731,16 +1941,16 @@ struct PlacesTable: View {
         }()
         if always || groups.contains(where: { $0.codes != main }) || dict.raw.dia2?[key] != nil {
             VStack(alignment: .leading, spacing: 8) {
-                Text("各地讀音").font(.caption.weight(.bold)).foregroundStyle(T.muted)
+                Text("各地讀音").ffFont(.caption, .bold).foregroundStyle(T.muted)
                 ForEach(Array(groups.enumerated()), id: \.offset) { _, g in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(g.places.map { String(dict.raw.places[$0].prefix(2)) }.joined(separator: "、") + (g.codes == main ? "（同通行）" : ""))
-                            .font(.caption).foregroundStyle(g.places.contains(place) ? T.oliveInk : T.muted)
+                            .ffFont(.caption).foregroundStyle(g.places.contains(place) ? T.oliveInk : T.muted)
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             // the 通行 box is written the 通行 way, whichever places share it
                             let shownIn = g.codes == main ? -1 : g.places[0]
-                            Text(dict.wordText(key, rom, shownIn)).font(T.lat(17)).foregroundStyle(T.greenInk)
-                            Text(dict.wordText(key, 3, shownIn)).font(.subheadline).foregroundStyle(T.purpleInk)
+                            Text(dict.wordText(key, rom, shownIn)).latFont(17).foregroundStyle(T.greenInk)
+                            Text(dict.wordText(key, 3, shownIn)).ffFont(.subheadline).foregroundStyle(T.purpleInk)
                             if g.guessed { Chip(text: "推測", fill: T.fn, edge: T.fnEdge, ink: T.muted) }
                         }
                         // the place also says it another way
@@ -1748,12 +1958,12 @@ struct PlacesTable: View {
                         ForEach(also, id: \.self) { x in
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
                                 Chip(text: "也講", fill: Color(hex: 0x4c3a5b), edge: Color(hex: 0x7b3c9b), ink: T.purpleInk)
-                                Text(dict.codes(x, rom, g.places[0])).font(T.lat(15)).foregroundStyle(T.greenInk)
-                                Text(dict.codes(x, 3, g.places[0])).font(.footnote).foregroundStyle(T.purpleInk)
+                                Text(dict.codes(x, rom, g.places[0])).latFont(15).foregroundStyle(T.greenInk)
+                                Text(dict.codes(x, 3, g.places[0])).ffFont(.footnote).foregroundStyle(T.purpleInk)
                                 let who = g.places.filter { dict.alsoSaid(key, $0).contains(x) }
                                 if who.count < g.places.count {
                                     Text(who.map { String(dict.raw.places[$0].prefix(2)) }.joined(separator: "、"))
-                                        .font(.caption2).foregroundStyle(T.muted)
+                                        .ffFont(.caption2).foregroundStyle(T.muted)
                                 }
                             }
                         }
@@ -1763,7 +1973,7 @@ struct PlacesTable: View {
                     .background(RoundedRectangle(cornerRadius: 12).fill(T.fn.opacity(0.55)))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(g.places.contains(place) ? Color(hex: 0x7b3c9b) : .clear, lineWidth: 1.5))
                 }
-                Text("紅色／推測 = 辭典沒有寫這個地方的讀音，是照規則推出來的。").font(.caption2).foregroundStyle(T.muted)
+                Text("紅色／推測 = 辭典沒有寫這個地方的讀音，是照規則推出來的。").ffFont(.caption2).foregroundStyle(T.muted)
             }
         }
     }
@@ -1789,7 +1999,7 @@ struct PronunciationPane: View {
                     .background(RoundedRectangle(cornerRadius: 14).fill(T.fn.opacity(0.7)))
                 if query.isEmpty {
                     Text("查一個詞，看它在鹿港、三峽、臺北、宜蘭、臺南、高雄、金門、馬公、新竹、臺中各地的讀音。紅色／推測 = 辭典沒有寫，照規則推出來的。")
-                        .font(.footnote).foregroundStyle(T.muted)
+                        .ffFont(.footnote).foregroundStyle(T.muted)
                 } else if keys.isEmpty {
                     Text("找不到「\(query)」。").foregroundStyle(T.muted)
                 }
@@ -1799,11 +2009,11 @@ struct PronunciationPane: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(Dict.hanOf(k)).scaledFont(24, weight: .semibold).foregroundStyle(T.glyph)
-                                Text("通行").font(.caption).foregroundStyle(T.muted)
-                                Text(dict.word(k, min(max(rom, 0), 2), -1)).font(T.lat(16)).foregroundStyle(T.greenInk)
-                                Text(dict.word(k, 3, -1)).font(.footnote).foregroundStyle(T.purpleInk)
+                                Text("通行").ffFont(.caption).foregroundStyle(T.muted)
+                                Text(dict.word(k, min(max(rom, 0), 2), -1)).latFont(16).foregroundStyle(T.greenInk)
+                                Text(dict.word(k, 3, -1)).ffFont(.footnote).foregroundStyle(T.purpleInk)
                                 Spacer(minLength: 0)
-                                Image(systemName: "chevron.right").font(.caption).foregroundStyle(T.muted)
+                                Image(systemName: "chevron.right").ffFont(.caption).foregroundStyle(T.muted)
                             }
                             PlacesTable(dict: dict, key: k, always: true)
                         }
@@ -1860,4 +2070,170 @@ struct PronunciationPane: View {
             keys = found
         }
     }
+}
+
+
+/// a word under the pointer (iPad trackpad / mouse, Mac) swells a little, like app icons on the iPad
+struct HoverSwell: ViewModifier {
+    @State private var on = false
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(on ? 1.18 : 1)
+            .shadow(color: .black.opacity(on ? 0.35 : 0), radius: on ? 4 : 0, y: on ? 2 : 0)
+            .zIndex(on ? 1 : 0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.65), value: on)
+            .onHover { on = $0 }
+    }
+}
+
+
+// MARK: - 依詞類列出
+
+/// all the words of one word class (any of their meanings), most common first: 300, then all
+struct WordClassPage: View {
+    let dict: Dict
+    let cls: String
+    @EnvironmentObject var store: Store
+    @State private var all = false
+    /// the word classes in the dictionary, plus 離合詞 (verbs that end in a noun: 洗身軀, 食飯)
+    static let classes = ["名詞", "動詞", "離合詞", "形容詞", "副詞", "量詞", "時間詞", "代詞", "數詞", "方位詞",
+                          "介詞", "連詞", "助詞", "疑問詞", "嘆詞", "擬聲詞", "擬態詞", "熟語"]
+
+    var body: some View {
+        let keys = dict.wordsOfClass(cls).sorted { store.rankOf($0) < store.rankOf($1) }
+        List {
+            KeyListSection(dict: dict, title: cls == "離合詞" ? "動詞裡面有名詞（\(keys.count)）" : "\(keys.count) 個詞",
+                           keys: all ? keys : Array(keys.prefix(300)))
+            if !all && keys.count > 300 {
+                Button { all = true } label: {
+                    Label("顯示全部（\(keys.count)）", systemImage: "list.bullet").foregroundStyle(T.oliveInk)
+                }
+                .listRowBackground(T.fn.opacity(0.7))
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .appBackground()
+        .navigationTitle(cls)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
+    }
+}
+
+extension Dict {
+    /// a verb (main meaning) whose last part is a noun in the dictionary: 洗身軀 (身軀), 食飯 (飯)
+    func isVerbWithNoun(_ key: String) -> Bool {
+        guard let pos = raw.pos[key], (pos.split(separator: "|", omittingEmptySubsequences: false).first.map(String.init) ?? "").contains("動詞") else { return false }
+        let hs = Array(Dict.hanOf(key)), cs = Dict.codesOf(key).split(separator: " ").map(String.init)
+        guard hs.count == cs.count, hs.count > 1 else { return false }
+        for L in 1..<hs.count {
+            let k = String(hs.suffix(L)) + "\t" + cs.suffix(L).joined(separator: " ")
+            if baseKeys.contains(k), let p = raw.pos[k],
+               (p.split(separator: "|", omittingEmptySubsequences: false).first.map(String.init) ?? "").contains("名詞") { return true }
+        }
+        return false
+    }
+
+    func wordsOfClass(_ c: String) -> [String] {
+        WordClassCache.lock.lock(); defer { WordClassCache.lock.unlock() }
+        if let hit = WordClassCache.map[c] { return hit }
+        let list: [String]
+        if c == "離合詞" { list = raw.pos.keys.filter { isVerbWithNoun($0) } }
+        else { list = raw.pos.compactMap { k, v in v.split(separator: "|").contains { $0.contains(c) } ? k : nil } }
+        WordClassCache.map[c] = list
+        return list
+    }
+    func wordClassCount(_ c: String) -> Int { wordsOfClass(c).count }
+}
+
+// MARK: - 比較兩個詞
+
+/// two words next to each other (iPad / Mac: left and right; iPhone: top and bottom)
+struct ComparePage: View {
+    let dict: Dict
+    @Environment(\.horizontalSizeClass) private var size
+    var body: some View {
+        Group {
+            if size == .regular {
+                HStack(spacing: 0) {
+                    ComparePane(dict: dict, slot: "A")
+                    Rectangle().fill(T.fnEdge).frame(width: 1)
+                    ComparePane(dict: dict, slot: "B")
+                }
+            } else {
+                VStack(spacing: 0) {
+                    ComparePane(dict: dict, slot: "A")
+                    Rectangle().fill(T.fnEdge).frame(height: 1)
+                    ComparePane(dict: dict, slot: "B")
+                }
+            }
+        }
+        .appBackground()
+        .navigationTitle("比較兩個詞")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { RomButton() } }
+    }
+}
+
+/// one side of 比較: search, pick a word, read its entry (remembered for next time)
+struct ComparePane: View {
+    let dict: Dict
+    let slot: String
+    @AppStorage private var key: String
+    @State private var query = ""
+    @State private var found: [String] = []
+    @State private var task: Task<Void, Never>?
+
+    init(dict: Dict, slot: String) {
+        self.dict = dict; self.slot = slot
+        _key = AppStorage(wrappedValue: "", "compare" + slot)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").foregroundStyle(T.muted)
+                TextField(slot == "A" ? "第一個詞" : "第二個詞", text: $query)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: query) { search() }
+                if !query.isEmpty { Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(T.muted) } }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(T.fn.opacity(0.8)))
+            .padding(10)
+            if !query.isEmpty {
+                List(found, id: \.self) { k in
+                    Button { key = k; query = "" } label: { DictRow(dict: dict, key: k) }
+                        .listRowBackground(T.fn.opacity(0.7))
+                }
+                .scrollContentBackground(.hidden)
+            } else if !key.isEmpty, dict.raw.defs.m[key] != nil || dict.baseKeys.contains(key) || dict.isUser(key) {
+                ScrollView { DictEntryBody(dict: dict, key: key).padding(.horizontal).padding(.bottom) }
+            } else {
+                Text("查一個詞，選它。").foregroundStyle(T.muted).frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func search() {
+        task?.cancel()
+        let q = query, d = dict
+        guard !q.isEmpty else { found = []; return }
+        task = Task {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            let r = await Task.detached(priority: .userInitiated) { Lookup.run(d, q) }.value
+            guard !Task.isCancelled else { return }
+            var out: [String] = []
+            for k in r.tones + r.taigi + r.exact + r.contains + r.gloss where !out.contains(k) { out.append(k) }
+            found = Array(out.prefix(40))
+        }
+    }
+}
+
+/// word class lists are worked out once
+enum WordClassCache {
+    nonisolated(unsafe) static var map: [String: [String]] = [:]
+    static let lock = NSLock()
 }

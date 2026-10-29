@@ -194,6 +194,26 @@ for c in sorted(used):
     try:
         parse(c) and code_to_haolo(c)
     except Exception: print("BAD CODE", repr(c))
+# 聲調顏色 can write a syllable in the tone it's said in after tone sandhi (通行 5→7, 8→4; 泉 5→3, 8→3;
+# checked syllables ending in h lose the h: 4→2, 8→3), so those spellings are needed too
+def sandhi_codes(c):
+    p = parse(c)
+    if not p: return []
+    ini, nas, vow, fin, t = p
+    stop = bool(vow) and bool(fin)
+    base = c[:-1]
+    if t in (4, 8):
+        targets = ([2] if t == 4 else [3]) if not stop else ([8] if t == 4 else [4, 3])
+    else:
+        targets = {1: [7], 2: [1, 5], 3: [2], 5: [7, 3], 6: [3], 7: [3]}.get(t, [])
+    # before 仔: 2, 3 → 1; 1, 5, 6, 7, 8 and 4 ending in h → 7; 4 ending in p/t/k → 8
+    targets = targets + ({2: [1], 3: [1], 1: [7], 5: [7], 6: [7], 7: [7], 8: [7]}.get(t, []) if t != 4 else ([8] if stop else [7]))
+    return [base + str(n) for n in targets]
+for c in list(used):
+    for n in sandhi_codes(c):
+        try:
+            if parse(n) and code_to_haolo(n) and code_to_tl(n) and code_to_poj(n) and code_to_zhuyin(n): used.add(n)
+        except Exception: pass
 syl = {c: [code_to_zhuyin(c), code_to_haolo(c)] for c in sorted(used) if parse(c)}
 tl = {}
 for c in syl:

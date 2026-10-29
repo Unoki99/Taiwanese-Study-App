@@ -16,8 +16,8 @@ if [ "$HERE" != "$DEST" ]; then
   mkdir -p "$DEST"
   # keep word data that was already built there
   rsync -a --delete --exclude ".DS_Store" --exclude "xcuserdata" --exclude "project.xcworkspace" \
-        --exclude "FangfangCards/dict.json" --exclude "FangfangCards/cards.json" "$HERE/" "$DEST/"
-  for f in dict.json cards.json; do
+        --exclude "FangfangCards/dict.json" --exclude "FangfangCards/cards.json" --exclude "FangfangCards/grammar.json" "$HERE/" "$DEST/"
+  for f in dict.json cards.json grammar.json; do
     [ -f "$HERE/FangfangCards/$f" ] && cp "$HERE/FangfangCards/$f" "$DEST/FangfangCards/$f"
   done
 fi
@@ -26,6 +26,12 @@ echo "專案：$DEST/FangfangCards.xcodeproj"
 # 2. word data (built from the MOE dictionary file if it isn't there yet)
 if [ ! -f "$DEST/FangfangCards/dict.json" ] || [ ! -f "$DEST/FangfangCards/cards.json" ]; then
   bash "$DEST/build-data.sh" || { echo "✗ 沒辦法建立詞典資料。"; exit 1; }
+fi
+# 文法 data (made from the word data; quick)
+if [ ! -f "$DEST/FangfangCards/grammar.json" ]; then
+  echo "整理文法資料…"
+  (cd "$DEST/tools" && /usr/bin/env python3 build_grammar.py ../FangfangCards/dict.json ../FangfangCards/grammar.json > /dev/null) \
+    || { echo "✗ 沒辦法建立文法資料。"; exit 1; }
 fi
 
 # 3. Apple developer team (only needed when the project doesn't have one, e.g. downloaded from GitHub)

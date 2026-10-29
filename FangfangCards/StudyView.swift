@@ -146,7 +146,7 @@ struct StudyView: View {
                     label("這個意思的台語是？")
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         if let p = c.d.first?.p, !p.isEmpty { Chip(text: p) }
-                        Text(c.firstMeaning).font(.title3).foregroundStyle(T.glyph)
+                        Text(c.firstMeaning).ffFont(.title3).foregroundStyle(T.glyph)
                     }
                 case .wordToMeaning:
                     label("這個詞是什麼意思？")
@@ -155,7 +155,7 @@ struct StudyView: View {
                         Spacer()
                         if let a = c.a { PlayButton(path: Audio.wordPath(a), size: 44) }
                     }
-                    Text(store.cardRom(c, rom, place)).font(T.lat(24)).foregroundStyle(T.greenInk)
+                    Text(store.cardRom(c, rom, place)).latFont(24).foregroundStyle(T.greenInk)
                 case .listen:
                     label("聽發音，選出正確的詞")
                     HStack {
@@ -167,25 +167,25 @@ struct StudyView: View {
                 case .fillBlank:
                     label("例句填空")
                     if let x = q.example {
-                        Text(x.bh ?? x.h).font(.title3).foregroundStyle(T.blueInk)
-                        if let br = store.blankRom(c, x, rom, place) { Text(br).font(T.lat(17)).foregroundStyle(T.greenInk) }
-                        Text(x.z).font(.subheadline).foregroundStyle(T.muted)
+                        Text(x.bh ?? x.h).ffFont(.title3).foregroundStyle(T.blueInk)
+                        if let br = store.blankRom(c, x, rom, place) { Text(br).latFont(17).foregroundStyle(T.greenInk) }
+                        Text(x.z).ffFont(.subheadline).foregroundStyle(T.muted)
                         HStack(spacing: 8) {
                             PlayButton(path: Audio.examplePath(x.n), size: 28)
-                            Text("聽例句（提示）").font(.caption).foregroundStyle(T.muted)
+                            Text("聽例句（提示）").ffFont(.caption).foregroundStyle(T.muted)
                         }
                     }
                 case .romanization:
                     label("這個詞怎麼唸？")
                     Text(c.h).scaledFont(60, weight: .medium).foregroundStyle(T.blueInk)
-                    Text(c.firstMeaning).font(.footnote).foregroundStyle(T.muted).lineLimit(2)
+                    Text(c.firstMeaning).ffFont(.footnote).foregroundStyle(T.muted).lineLimit(2)
                 }
             }
         }
     }
 
     private func label(_ s: String) -> some View {
-        Text(s).font(.subheadline.weight(.bold)).foregroundStyle(T.oliveInk)
+        Text(s).ffFont(.subheadline, .bold).foregroundStyle(T.oliveInk)
     }
 
     @ViewBuilder
@@ -213,12 +213,12 @@ struct StudyView: View {
                 Text(o.firstMeaning).foregroundStyle(T.glyph).lineLimit(3).multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             case .romanization:
-                Text(store.cardRom(o, rom, place)).font(T.lat(22)).foregroundStyle(T.greenInk)
+                Text(store.cardRom(o, rom, place)).latFont(22).foregroundStyle(T.greenInk)
             default:
                 Text(o.h).scaledFont(30, weight: .medium).foregroundStyle(T.blueInk)
                     .lineLimit(1).minimumScaleFactor(0.5)
                 if answered {
-                    Text(store.cardRom(o, rom, place)).font(T.lat(14)).foregroundStyle(T.greenInk)
+                    Text(store.cardRom(o, rom, place)).latFont(14).foregroundStyle(T.greenInk)
                 }
             }
         }
@@ -259,10 +259,10 @@ struct StudyView: View {
             Panel {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(ok ? (learned.contains(c) ? "答對了！學會了 🎉" : "答對了！") : "答錯了")
-                        .font(.headline).foregroundStyle(ok ? T.greenInk : T.rustInk)
+                        .ffFont(.headline).foregroundStyle(ok ? T.greenInk : T.rustInk)
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(c.h).font(.title.weight(.medium)).foregroundStyle(T.blueInk)
-                        Text(store.cardRom(c, rom, place)).font(T.lat(20)).foregroundStyle(T.greenInk)
+                        Text(c.h).ffFont(.title, .medium).foregroundStyle(T.blueInk)
+                        Text(store.cardRom(c, rom, place)).latFont(20).foregroundStyle(T.greenInk)
                         Text(store.cardZy(c, place)).foregroundStyle(T.purpleInk)
                         Spacer()
                         if let a = c.a { PlayButton(path: Audio.wordPath(a), size: 34) }
@@ -275,7 +275,7 @@ struct StudyView: View {
                     }
                     if q.kind == .fillBlank, let x = q.example {
                         Text(store.exampleHan(c, x, place)).padding(.top, 4)
-                        Text(store.exampleRom(c, x, rom, place)).font(T.lat(15)).foregroundStyle(T.greenInk)
+                        Text(store.exampleRom(c, x, rom, place)).latFont(15).foregroundStyle(T.greenInk)
                     }
                 }
             }
@@ -283,7 +283,7 @@ struct StudyView: View {
                 chosen = nil
                 idx += 1
             } label: {
-                Text(idx + 1 >= queue.count ? "看結果" : "下一題").font(.headline).frame(maxWidth: .infinity, minHeight: 44)
+                Text(idx + 1 >= queue.count ? "看結果" : "下一題").ffFont(.headline).frame(maxWidth: .infinity, minHeight: 44)
             }
             .prominentButton(T.greenEdge)
         }
@@ -294,12 +294,12 @@ struct StudyView: View {
     private var summary: some View {
         ScrollView {
             VStack(spacing: 18) {
-                Text("練習完了").font(.largeTitle.weight(.bold)).foregroundStyle(T.glyph)
+                Text("練習完了").ffFont(.largeTitle, .bold).foregroundStyle(T.glyph)
                 Text("答對 \(right) 題，答錯 \(wrong) 題").foregroundStyle(T.muted)
                 if !learned.isEmpty {
                     Panel {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("學會了，移到「熟悉」：").font(.headline).foregroundStyle(T.greenInk)
+                            Text("學會了，移到「熟悉」：").ffFont(.headline).foregroundStyle(T.greenInk)
                             ForEach(learned) { WordRow(card: $0) }
                         }
                     }

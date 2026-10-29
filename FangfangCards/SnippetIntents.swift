@@ -102,15 +102,15 @@ struct LookUpSnippetView: View {
             ForEach(rows) { row in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .center, spacing: 8) {
-                        Text(row.han).font(.title3.weight(.semibold))
-                        Text(row.rom).font(T.lat(16)).foregroundStyle(.green)
+                        Text(row.han).ffFont(.title3, .semibold)
+                        Text(row.rom).latFont(16).foregroundStyle(.green)
                             .pill(.green)
-                        Text(row.zy).font(.footnote).foregroundStyle(.purple)
+                        Text(row.zy).ffFont(.footnote).foregroundStyle(.purple)
                             .pill(.purple)
                         Spacer(minLength: 0)
                     }
                     if !row.gloss.isEmpty {
-                        Text(row.gloss).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                        Text(row.gloss).ffFont(.footnote).foregroundStyle(.secondary).lineLimit(2)
                     }
                     buttons(row)
                 }
@@ -140,7 +140,7 @@ struct LookUpSnippetView: View {
             .buttonStyle(.bordered).tint(.yellow)
             if let st = row.status {
                 if st == 1 {
-                    Text("熟悉").font(.caption).foregroundStyle(.green)
+                    Text("熟悉").ffFont(.caption).foregroundStyle(.green)
                 } else {
                     Button(intent: ToggleUnknownIntent(key: row.key)) {
                         Label(st == 2 ? "在不熟" : "加到不熟", systemImage: st == 2 ? "star.fill" : "star")
@@ -152,7 +152,7 @@ struct LookUpSnippetView: View {
             Button(intent: OpenLookUpIntent(word: row.han)) { Image(systemName: "arrow.up.forward.app") }
                 .buttonStyle(.bordered)
         }
-        .font(.caption)
+        .ffFont(.caption)
         .labelStyle(.titleAndIcon)
     }
 }

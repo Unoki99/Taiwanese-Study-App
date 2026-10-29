@@ -24,4 +24,5 @@ echo "整理資料中…（大概 1 分鐘）"
 /usr/bin/env python3 build_moe.py "$TMP/sheets.json" own.json "$TMP/data2.json" > /dev/null
 /usr/bin/env python3 to_app_data.py "$TMP/data2.json" "$TMP/essay.txt" "$HERE/FangfangCards/dict.json" > /dev/null
 /usr/bin/env python3 build_cards.py "$HERE/FangfangCards/dict.json" "$TMP/essay.txt" "$HERE/FangfangCards/cards.json" > /dev/null
-echo "✓ 完成：FangfangCards/dict.json、FangfangCards/cards.json"
+/usr/bin/env python3 build_grammar.py "$HERE/FangfangCards/dict.json" "$HERE/FangfangCards/grammar.json" > /dev/null
+echo "✓ 完成：FangfangCards/dict.json、FangfangCards/cards.json、FangfangCards/grammar.json"
