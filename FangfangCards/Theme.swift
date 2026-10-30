@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension Color {
     init(hex: UInt32) {
@@ -217,8 +218,30 @@ enum TextSize {
     static let levels: [DynamicTypeSize] = [.large, .xLarge, .xxLarge, .xxxLarge,
                                             .accessibility1, .accessibility2, .accessibility3, .accessibility4, .accessibility5]
     static let names = ["100%", "110%", "120%", "135%", "160%", "190%", "235%", "275%", "310%"]
+    #if targetEnvironment(macCatalyst)
     static let key = "macTextSize2"
     static let standard = 3                   // 135%: the Mac's own text sizes are small on a big screen
+    #else
+    /// iPad (also the iPad app on a Mac): 100% = exactly as before (the system's text sizes)
+    static let key = "padTextSize"
+    static let standard = 0
+    #endif
+    /// the 文字大小 setting is shown: Mac, iPad, or the iPad app on a Mac (iPhone follows the system's size)
+    static var onThisDevice: Bool {
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        return padScales
+        #endif
+    }
+    /// iPad, or the iPad app running on a Mac: has its own text size setting (iPhone follows the system)
+    static var padScales: Bool {
+        #if targetEnvironment(macCatalyst)
+        return false
+        #else
+        return UIDevice.current.userInterfaceIdiom == .pad
+        #endif
+    }
     static func clamp(_ i: Int) -> Int { min(max(i, 0), levels.count - 1) }
 }
 
@@ -232,7 +255,13 @@ struct MacTextSize: ViewModifier {
             .onAppear { MacWindow.applyTextSize(level) }
             .onChange(of: level) { MacWindow.applyTextSize(level) }
         #else
-        content
+        if TextSize.padScales && level > 0 {
+            // iPad: text without a style of its own, and what the system draws (form rows, lists), bigger too
+            content.font(.system(size: 17 * TextSize.factor(level)))
+                .dynamicTypeSize(TextSize.levels[TextSize.clamp(level)])
+        } else {
+            content
+        }
         #endif
     }
 }
@@ -292,8 +321,14 @@ struct FFFont: ViewModifier {
                             weight: weight ?? (style == .headline ? .semibold : .regular))
         content.font(mono ? f.monospacedDigit() : f)
         #else
-        let f = weight.map { style.font.weight($0) } ?? style.font
-        content.font(mono ? f.monospacedDigit() : f)
+        if TextSize.padScales && level > 0 {
+            let f = Font.system(size: style.size * TextSize.factor(level),
+                                weight: weight ?? (style == .headline ? .semibold : .regular))
+            content.font(mono ? f.monospacedDigit() : f)
+        } else {
+            let f = weight.map { style.font.weight($0) } ?? style.font
+            content.font(mono ? f.monospacedDigit() : f)
+        }
         #endif
     }
 }
@@ -306,7 +341,11 @@ struct LatFont: ViewModifier {
         #if targetEnvironment(macCatalyst)
         content.font(.custom("DejaVuSans", fixedSize: size * 0.77 * TextSize.factor(level)))
         #else
-        content.font(T.lat(size))
+        if TextSize.padScales && level > 0 {
+            content.font(.custom("DejaVuSans", fixedSize: size * TextSize.factor(level)))
+        } else {
+            content.font(T.lat(size))
+        }
         #endif
     }
 }
@@ -327,7 +366,7 @@ struct ScaledFont: ViewModifier {
             #if targetEnvironment(macCatalyst)
             content.font(.system(size: size * 0.77 * TextSize.factor(level), weight: weight))
             #else
-            content.font(.system(size: size, weight: weight))
+            content.font(.system(size: size * (TextSize.padScales ? TextSize.factor(level) : 1), weight: weight))
             #endif
         }
     }

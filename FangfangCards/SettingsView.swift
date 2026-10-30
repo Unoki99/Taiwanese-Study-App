@@ -16,7 +16,9 @@ struct SettingsView: View {
     @AppStorage(TextSize.key) private var textSize = TextSize.standard
     @AppStorage(ToneColors.key) private var toneSys = 0
     @AppStorage(SwellTest.key) private var swellTest = SwellTest.standard
+    @AppStorage(SwellTest.animKey) private var swellAnim = SwellTest.animStandard
     @AppStorage(ToneColors.marksKey) private var toneMarks = true
+    @AppStorage(ToneColors.glowKey) private var toneGlow = ToneColors.glowStandard
     @State private var pickFolder = false
 
     @State private var shareItem: ShareItem?
@@ -44,6 +46,7 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 if toneSys != 0 {
                     Toggle("聲調符號照變調寫", isOn: $toneMarks)
+                    Toggle("聲調光暈", isOn: $toneGlow)
                 }
                 Toggle("卡片先隱藏意思（點一下才顯示）", isOn: $hideMeaning)
                 Toggle("Liquid Glass 效果", isOn: $glassOn)
@@ -51,7 +54,8 @@ struct SettingsView: View {
                     ForEach(0..<3, id: \.self) { Text(SwellTest.names[$0]).tag($0) }
                 }
                 .pickerStyle(.menu)
-                #if targetEnvironment(macCatalyst)
+                Toggle("放大要動畫（測試）", isOn: $swellAnim)
+                if TextSize.onThisDevice {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("文字大小")
@@ -66,8 +70,8 @@ struct SettingsView: View {
                         Image(systemName: "textformat.size.larger").foregroundStyle(T.muted)
                     }
                 }
-                Text("也可以用 ⌘+ 放大、⌘− 縮小、⌘0 回到原本大小。").ffFont(.footnote).foregroundStyle(T.muted)
-                #endif
+                Text("也可以用 ⌘+ 放大、⌘− 縮小、⌘0 回到原本大小（接鍵盤的時候）。").ffFont(.footnote).foregroundStyle(T.muted)
+                }
             }
             Section("發音") {
                 Toggle("新卡片自動播放發音", isOn: $autoPlay)

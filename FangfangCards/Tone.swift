@@ -129,18 +129,24 @@ extension Dict {
         }
     }
 
-    /// a word listed as both 名詞 and 量詞, right after a 數詞 or 代詞 (一隻, 這擺): here it's the 量詞
-    func classifierHere(_ key: String?, after prev: String?) -> Bool {
-        guard let key, let pos = raw.pos[key], pos.contains("名詞"), pos.contains("量詞"),
+    /// a word used as a 量詞 here, so its tone changes:
+    /// - listed as both 名詞 and 量詞, right after a 數詞 or 代詞 (一隻, 這擺);
+    /// - a one-syllable 名詞 between a 代詞 and another 名詞 (這款種: 款 is a 量詞 here, even though the
+    ///   dictionary only lists it as a 名詞)
+    func classifierHere(_ key: String?, after prev: String?, before next: String? = nil) -> Bool {
+        guard let key, let pos = raw.pos[key], pos.contains("名詞"),
               let prev, let pp = raw.pos[prev] else { return false }
-        return pp.contains("數詞") || pp.contains("代詞")
+        if pos.contains("量詞") && (pp.contains("數詞") || pp.contains("代詞")) { return true }
+        if pp.contains("代詞"), Dict.codesOf(key).split(separator: " ").count == 1,
+           let next, let np = raw.pos[next], np.contains("名詞") { return true }
+        return false
     }
 
     /// nouns, 時間詞 and verbs ending in a noun keep the tone of their last syllable
     /// (`after` = the word before it, to tell a 量詞 from a 名詞)
-    func keepsLastTone(_ key: String?, after prev: String? = nil) -> Bool {
+    func keepsLastTone(_ key: String?, after prev: String? = nil, before next: String? = nil) -> Bool {
         guard let key, let pos = raw.pos[key] else { return false }
-        if classifierHere(key, after: prev) { return false }
+        if classifierHere(key, after: prev, before: next) { return false }
         if pos.contains("時間詞") { return true }
         let main = pos.split(separator: "|", omittingEmptySubsequences: false).first.map(String.init) ?? ""
         if main.contains("名詞") { return true }
@@ -157,7 +163,7 @@ extension Dict {
     }
 
     /// a word's syllables as tone units, from its tokens ("--" marks the light tone)
-    func toneUnits(tokens: [String], key: String?, after prev: String? = nil) -> [ToneUnit] {
+    func toneUnits(tokens: [String], key: String?, after prev: String? = nil, before next: String? = nil) -> [ToneUnit] {
         var out: [ToneUnit] = []
         var lightNext = false
         for t in tokens {
@@ -172,7 +178,7 @@ extension Dict {
                 lightNext = false
             }
         }
-        if keepsLastTone(key, after: prev), !out.isEmpty { out[out.count - 1].keep = true }
+        if keepsLastTone(key, after: prev, before: next), !out.isEmpty { out[out.count - 1].keep = true }
         // 仔 inside the word
         if let key {
             let hs = Array(Dict.hanOf(key))
@@ -262,12 +268,23 @@ extension Dict {
             .replacingOccurrences(of: "{^?", with: "{^").replacingOccurrences(of: "{^!", with: "{^")
         var keepAt = Set<Int>()
         var n = 0
-        var prevKey: String? = nil
+        // the words with 漢字, and whether punctuation comes before each (the word before / after across
+        // punctuation doesn't count)
+        var words: [(key: String?, count: Int, afterPunct: Bool)] = []
+        var sawPunct = false
         for p in exampleWords(h, clean) {
             let count = p.text.unicodeScalars.filter { ConvertEngine.isHan($0.value) }.count
-            if count > 0, keepsLastTone(p.key, after: prevKey) { keepAt.insert(n + count - 1) }
-            if count > 0 { prevKey = p.key }
-            n += count
+            if count == 0 {
+                if p.text.unicodeScalars.contains(where: { CharacterSet.punctuationCharacters.contains($0) }) { sawPunct = true }
+                continue
+            }
+            words.append((p.key, count, sawPunct)); sawPunct = false
+        }
+        for (w, word) in words.enumerated() {
+            let prevKey = w > 0 && !word.afterPunct ? words[w - 1].key : nil
+            let nextKey = w + 1 < words.count && !words[w + 1].afterPunct ? words[w + 1].key : nil
+            if keepsLastTone(word.key, after: prevKey, before: nextKey) { keepAt.insert(n + word.count - 1) }
+            n += word.count
         }
         let hanChars = h.filter { $0.unicodeScalars.first.map { ConvertEngine.isHan($0.value) } ?? false }.map { $0 }
         var units: [ToneUnit] = []
@@ -320,6 +337,7 @@ extension Dict {
 struct ToneMenu: View {
     @AppStorage(ToneColors.key) private var system = 0
     @AppStorage(ToneColors.marksKey) private var marks = true
+    @AppStorage(ToneColors.glowKey) private var glow = ToneColors.glowStandard
     @AppStorage("glass2") private var glassOn = false
     var body: some View {
         Menu {
@@ -331,6 +349,7 @@ struct ToneMenu: View {
             .pickerStyle(.inline)
             if system != 0 {
                 Toggle("聲調符號照變調寫", isOn: $marks)
+                Toggle("聲調光暈", isOn: $glow)
             }
         } label: {
             label
@@ -376,11 +395,39 @@ struct ToneMenu: View {
 }
 
 
+extension ToneColors {
+    /// the glow around coloured letters (設定 → 顯示 → 聲調光暈). The Mac draws it without blur: there every blur
+    /// is worked out again whenever anything on the page moves (a word swelling), which made hovering slow.
+    static let glowKey = "toneGlow"
+    #if targetEnvironment(macCatalyst)
+    static let glowStandard = true      // the Mac has its own cheaper glow (no blur)
+    #else
+    static let glowStandard = true
+    #endif
+}
+
 /// 聲調顏色 on: the coloured letters glow a little in their own colour
 struct ToneGlow: ViewModifier {
     @AppStorage(ToneColors.key) private var system = 0
+    @AppStorage(ToneColors.glowKey) private var glow = ToneColors.glowStandard
     @ViewBuilder func body(content: Content) -> some View {
-        if system != 0 {
+        if system != 0 && glow {
+            #if targetEnvironment(macCatalyst)
+            // Mac: no blur (the Mac works every blur out again whenever anything on the page moves). A soft
+            // halo instead: faint copies of the letters, a little to each side, in a ring of 8 and a wider
+            // ring of 8. Drawing letters is cheap; only the colours spread out around them.
+            ZStack {
+                ForEach(0..<16, id: \.self) { i in
+                    let r: CGFloat = i < 8 ? 1.4 : 3.0
+                    let a = Double(i % 8) * .pi / 4 + (i < 8 ? 0 : .pi / 8)
+                    content
+                        .offset(x: r * CGFloat(cos(a)), y: r * CGFloat(sin(a)))
+                        .opacity(i < 8 ? 0.16 : 0.07)
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+                content
+            }
+            #else
             // a ZStack (not .background) so the blurred copies get the same width as the text and wrap the
             // same way; a background copy is laid out again at the text's measured size and can wrap differently
             ZStack {
@@ -388,6 +435,7 @@ struct ToneGlow: ViewModifier {
                 content.blur(radius: 1.5).opacity(0.6).allowsHitTesting(false).accessibilityHidden(true)
                 content
             }
+            #endif
         } else {
             content
         }

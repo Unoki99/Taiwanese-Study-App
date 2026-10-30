@@ -391,19 +391,30 @@ struct ConvertPane: View {
         var ranges: [Int: (tokens: [String], from: Int, to: Int)] = [:]
         var prevKey: String? = nil
         func endPhrase() { if !units.isEmpty { units[units.count - 1].phraseEnd = true } }
+        // the word right after each word (not across punctuation or a line end): to tell a 量詞 (這款種)
+        var nextKeyOf: [Int: String] = [:]
+        var upcoming: String? = nil
+        for i in items.indices.reversed() {
+            let it = items[i]
+            if it.space { continue }
+            if it.newline || it.raw != nil || it.current.codes == nil { upcoming = nil; continue }
+            if let up = upcoming { nextKeyOf[i] = up }
+            upcoming = dict.keyOf(it.current)
+        }
         for (i, it) in items.enumerated() {
-            if it.newline { endPhrase(); continue }
+            if it.newline { endPhrase(); prevKey = nil; continue }
             if it.space { continue }
             if let raw = it.raw {
                 if ConvertEngine.isPunct(raw) && !ConvertEngine.openers.contains(raw) { endPhrase() }
+                prevKey = nil
                 continue
             }
-            guard let codes = it.current.codes else { endPhrase(); continue }
+            guard let codes = it.current.codes else { endPhrase(); prevKey = nil; continue }
             let key = dict.keyOf(it.current)
             let tokens: [String]
             if let key, dict.baseKeys.contains(key), it.current.parent == nil { tokens = dict.tokensFor(key, place) }
             else { tokens = (it.current.tokens ?? codes.joined(separator: " ")).split(separator: " ").map(String.init) }
-            let u = dict.toneUnits(tokens: tokens, key: key, after: prevKey)
+            let u = dict.toneUnits(tokens: tokens, key: key, after: prevKey, before: nextKeyOf[i])
             prevKey = key
             // a word that starts with "--" (--ah): the syllable before it keeps its tone
             if tokens.first == "--", !units.isEmpty { units[units.count - 1].beforeLight = true }
@@ -1003,8 +1014,9 @@ struct SwellWords: View {
     var vPad: CGFloat = 4
     let onTap: (Int) -> Void
     @State private var frames: [Int: CGRect] = [:]
-    @State private var scrubIndex: Int?
-    @State private var scrubbing = false
+    /// which word is swollen: kept in its own object, so only the words notice when it changes
+    /// (with @State here, every pointer move onto another word redrew the whole sentence)
+    @StateObject private var sw = SwellState()
     @State private var space = UUID()
 
     var body: some View {
@@ -1013,10 +1025,11 @@ struct SwellWords: View {
                 let p = pieces[i]
                 Group {
                     if p.tap {
-                        Button { if !scrubbing { onTap(i) } } label: {
+                        Button { if !sw.scrubbing { onTap(i) } } label: {
                             Text(p.text).toneGlow().padding(.vertical, vPad).contentShape(Rectangle())
                         }
-                        .buttonStyle(SwellButtonStyle(hot: scrubIndex == i))
+                        .buttonStyle(SwellButtonStyle())
+                        .swellHot(sw, i)
                         .background(GeometryReader { g in
                             Color.clear.preference(key: WordFramesKey.self, value: [i: g.frame(in: .named(space))])
                         })
@@ -1027,27 +1040,35 @@ struct SwellWords: View {
                 .layoutValue(key: FlowBreak.self, value: p.newLine)
             }
         }
-        #if targetEnvironment(macCatalyst)
-        return flow
-        #else
-        return flow
+        let tracked = flow
             .coordinateSpace(name: space)
             .onPreferenceChange(WordFramesKey.self) { frames = $0 }
+            // one pointer tracker for the whole text, instead of one per word: with one per word, the Mac
+            // checked every word on every mouse move (slow, and late to react)
+            .onContinuousHover(coordinateSpace: .named(space)) { phase in
+                var hit: Int? = nil
+                if case .active(let p) = phase { hit = frames.first { $0.value.contains(p) }?.key }
+                if hit != sw.hover { sw.hover = hit }
+            }
+        #if targetEnvironment(macCatalyst)
+        return tracked
+        #else
+        return tracked
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.3)
                     .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(space)))
                     .onChanged { v in
                         guard case .second(true, let drag) = v else { return }
-                        if !scrubbing { scrubbing = true; Haptics.start() }
+                        if !sw.scrubbing { sw.scrubbing = true; Haptics.start() }
                         guard let drag else { return }
                         let hit = frames.first { $0.value.insetBy(dx: -4, dy: -2).contains(drag.location) }?.key
-                        if hit != scrubIndex { scrubIndex = hit; if hit != nil { Haptics.tick() } }
+                        if hit != sw.scrub { sw.scrub = hit; if hit != nil { Haptics.tick() } }
                     }
                     .onEnded { _ in
-                        let open = scrubIndex
-                        scrubIndex = nil
+                        let open = sw.scrub
+                        sw.scrub = nil
                         if let open { onTap(open) }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrubbing = false }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [sw] in sw.scrubbing = false }
                     }
             )
         #endif
@@ -1510,8 +1531,9 @@ struct ExampleBlock: View {
     // hold a finger on the sentence and slide over the words: the word under the finger swells,
     // letting go opens it (iPhone / iPad)
     @State private var wordFrames: [Int: CGRect] = [:]
-    @State private var scrubIndex: Int?
-    @State private var scrubbing = false
+    /// which word is swollen: kept in its own object, so only the words notice when it changes
+    /// (with @State here, every pointer move onto another word redrew the whole sentence)
+    @StateObject private var sw = SwellState()
     @State private var scrubSpace = UUID()
     @AppStorage("ff-swaps") private var swapsJSON = ""     // your choices (redraws when they change)
     @AppStorage("ff-swap-off") private var swapOffJSON = "" // sentences with the 在地詞 switch off
@@ -1680,16 +1702,18 @@ struct ExampleBlock: View {
         let layout = FlowLayout(spacing: 0, lineSpacing: -4) {     // taller boxes, lines as close as before
             ForEach(Array(pieces.enumerated()), id: \.offset) { i, p in
                 if let orig = p.swapOf {
-                    Button { if !scrubbing { swapWord = orig; swapZh = zh } } label: {
+                    Button { if !sw.scrubbing { swapWord = orig; swapZh = zh } } label: {
                         wordLabel(colored(i, p.swapped ? T.swapInk : T.glyph), line: T.swapInk.opacity(0.8))
                     }
-                    .buttonStyle(SwellButtonStyle(hot: scrubIndex == i))
+                    .buttonStyle(SwellButtonStyle())
+                    .swellHot(sw, i)
                     .background(frameReader(i))
                 } else if let k = p.key, k != own {
-                    Button { if !scrubbing { onWord(k) } } label: {
+                    Button { if !sw.scrubbing { onWord(k) } } label: {
                         wordLabel(colored(i, T.blueInk), line: T.blueInk.opacity(0.45))
                     }
-                    .buttonStyle(SwellButtonStyle(hot: scrubIndex == i))
+                    .buttonStyle(SwellButtonStyle())
+                    .swellHot(sw, i)
                     .background(frameReader(i))
                 } else {
                     Text(colored(i, p.key != nil && p.key == own ? T.oliveInk : T.glyph)).toneGlow().ffFont(.body)
@@ -1698,28 +1722,35 @@ struct ExampleBlock: View {
                 }
             }
         }
-        #if targetEnvironment(macCatalyst)
-        return layout
-        #else
-        return layout
+        let tracked = layout
             .coordinateSpace(name: scrubSpace)
             .onPreferenceChange(WordFramesKey.self) { wordFrames = $0 }
+            // one pointer tracker for the whole sentence (see SwellWords)
+            .onContinuousHover(coordinateSpace: .named(scrubSpace)) { phase in
+                var hit: Int? = nil
+                if case .active(let p) = phase { hit = wordFrames.first { $0.value.contains(p) }?.key }
+                if hit != sw.hover { sw.hover = hit }
+            }
+        #if targetEnvironment(macCatalyst)
+        return tracked
+        #else
+        return tracked
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.3)
                     .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(scrubSpace)))
                     .onChanged { v in
                         guard case .second(true, let drag) = v else { return }
-                        if !scrubbing { scrubbing = true; Haptics.start() }
+                        if !sw.scrubbing { sw.scrubbing = true; Haptics.start() }
                         guard let drag else { return }
                         let hit = wordFrames.first { $0.value.insetBy(dx: -4, dy: -2).contains(drag.location) }?.key
-                        if hit != scrubIndex { scrubIndex = hit; if hit != nil { Haptics.tick() } }
+                        if hit != sw.scrub { sw.scrub = hit; if hit != nil { Haptics.tick() } }
                     }
                     .onEnded { _ in
-                        let open = scrubIndex.flatMap(action)
-                        scrubIndex = nil
+                        let open = sw.scrub.flatMap(action)
+                        sw.scrub = nil
                         open?()
                         // the word's own button may fire too when the finger lifts: ignore it for a moment
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrubbing = false }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [sw] in sw.scrubbing = false }
                     }
             )
         #endif
@@ -2213,27 +2244,52 @@ struct PronunciationPane: View {
 /// a word in an example sentence grows a little while it's pressed, under the pointer (Mac, iPad with a
 /// trackpad), or under the finger while sliding over the words (`hot`)
 struct SwellButtonStyle: ButtonStyle {
-    var hot = false
     func makeBody(configuration: Configuration) -> some View {
-        SwellBody(label: configuration.label, on: configuration.isPressed || hot)
+        SwellBody(label: configuration.label, pressed: configuration.isPressed)
     }
+}
+
+/// which word of a sentence is swollen (under the pointer, or under the finger while sliding)
+final class SwellState: ObservableObject {
+    @Published var hover: Int?
+    @Published var scrub: Int?
+    var scrubbing = false
+}
+
+private struct SwellHotKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var swellHot: Bool {
+        get { self[SwellHotKey.self] }
+        set { self[SwellHotKey.self] = newValue }
+    }
+}
+
+/// word i watches the sentence's SwellState; only this small view is redrawn when the swollen word changes
+private struct SwellHot<Content: View>: View {
+    @ObservedObject var state: SwellState
+    let i: Int
+    let content: Content
+    var body: some View { content.environment(\.swellHot, state.hover == i || state.scrub == i) }
+}
+extension View {
+    func swellHot(_ state: SwellState, _ i: Int) -> some View { SwellHot(state: state, i: i, content: self) }
 }
 
 private struct SwellBody<L: View>: View {
     let label: L
-    let on: Bool
-    @State private var hover = false
+    let pressed: Bool
+    @Environment(\.swellHot) private var hot
     /// TEST: which way of swelling (設定 → 顯示 → 放大效果): 0 as before (shadow), 1 only grow, 2 drawn as a picture
     @AppStorage(SwellTest.key) private var style = SwellTest.standard
+    @AppStorage(SwellTest.animKey) private var animated = SwellTest.animStandard
     var body: some View {
-        let big = on || hover
+        let big = pressed || hot
         switch style {
         case 1:
             // only grows: no shadow (a blur on every frame), no bringing to the front (re-arranges the sentence)
             label
                 .scaleEffect(big ? 1.18 : 1)
-                .animation(.easeOut(duration: 0.15), value: big)
-                .onHover { hover = $0 }
+                .animation(animated ? .easeOut(duration: 0.15) : nil, value: big)
         case 2:
             // the word (with its glow) is drawn once into a picture, and only the picture grows
             label
@@ -2242,15 +2298,13 @@ private struct SwellBody<L: View>: View {
                 .padding(-8)
                 .scaleEffect(big ? 1.16 : 1)
                 .zIndex(big ? 1 : 0)
-                .animation(.easeOut(duration: 0.14), value: big)
-                .onHover { hover = $0 }
+                .animation(animated ? .easeOut(duration: 0.14) : nil, value: big)
         default:
             label
                 .scaleEffect(big ? 1.18 : 1)
                 .shadow(color: .black.opacity(big ? 0.35 : 0), radius: big ? 4 : 0, y: big ? 2 : 0)
                 .zIndex(big ? 1 : 0)
-                .animation(.spring(response: 0.25, dampingFraction: 0.65), value: big)
-                .onHover { hover = $0 }
+                .animation(animated ? .spring(response: 0.25, dampingFraction: 0.65) : nil, value: big)
         }
     }
 }
@@ -2259,11 +2313,14 @@ private struct SwellBody<L: View>: View {
 enum SwellTest {
     static let key = "swellTest"
     #if targetEnvironment(macCatalyst)
-    static let standard = 2
+    static let standard = 1
     #else
     static let standard = 0
     #endif
     static let names = ["原本（有影）", "只放大", "畫成圖再放大"]
+    /// animate the swell, or jump straight to the new size
+    static let animKey = "swellAnim"
+    static let animStandard = true
 }
 
 struct WordFramesKey: PreferenceKey {
