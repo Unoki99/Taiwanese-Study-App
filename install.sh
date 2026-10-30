@@ -30,6 +30,7 @@ fi
 
 # 3. Apple developer team (only needed when the project doesn't have one, e.g. downloaded from GitHub)
 TEAMARG=()
+IDARG=()
 if grep -q 'DEVELOPMENT_TEAM = "";' "$DEST/FangfangCards.xcodeproj/project.pbxproj"; then
   TEAM="${FANGFANG_TEAM:-$(cat "$HOME/.fangfang-team" 2>/dev/null)}"
   if [ -z "$TEAM" ]; then
@@ -40,7 +41,10 @@ if grep -q 'DEVELOPMENT_TEAM = "";' "$DEST/FangfangCards.xcodeproj/project.pbxpr
     exit 1
   fi
   echo "$TEAM" > "$HOME/.fangfang-team"
-  TEAMARG=(DEVELOPMENT_TEAM="$TEAM")
+  # an app ID of your own: each Apple ID can only use IDs no one else has registered
+  FFID="${FANGFANG_ID:-com.fangfangcards.$(echo "$TEAM" | tr 'A-Z' 'a-z')}"
+  TEAMARG=(DEVELOPMENT_TEAM="$TEAM" FF_ID="$FFID")
+  IDARG=(FF_ID="$FFID")
 fi
 
 fail() {
@@ -88,7 +92,7 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "mac" ]; then
   echo "建置 Mac 版…"
   xcodebuild -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards -configuration Release \
      -destination "generic/platform=macOS,variant=Mac Catalyst" -derivedDataPath "$DD" \
-     CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" \
+     CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" "${IDARG[@]}" \
      build > "$LOG" 2>&1 < /dev/null || fail
   MACAPP=$(ls -d "$DD"/Build/Products/Release-maccatalyst/*.app | head -1)
   TARGET="/Applications"

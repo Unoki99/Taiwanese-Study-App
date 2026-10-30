@@ -9,23 +9,33 @@ iPhone／iPad 的台語單詞卡 App。像交友 App 一樣滑卡片：
 
 ## 安裝
 
-需要：Mac + Xcode（已經登入你的 Apple ID），iPhone／iPad 已經開過開發者模式。
+需要：
+
+- 一台 Mac，裝好 **Xcode**（App Store 免費下載），打開一次，在 **Xcode → Settings → Accounts** 用你的 Apple ID 登入（免費的 Apple ID 就可以）。
+- iPhone／iPad：iOS／iPadOS 17 以上；Mac 版：macOS 14 以上。
+
+步驟：
 
 1. 在 GitHub 按 **Code → Download ZIP**，解壓縮到「下載項目」，資料夾會叫 `fangfang-cards-main`。（用 git clone 的話，指令裡的路徑換成你 clone 的資料夾。）
-2. iPhone 解鎖，接上傳輸線（或跟 Mac 連同一個 Wi-Fi）。
-3. 打開 Terminal，執行：
+2. 第一次裝到 iPhone／iPad 的話：用傳輸線接上 Mac，手機上按「信任這部電腦」。然後打開 **設定 → 隱私權與安全性 → 開發者模式**，打開，手機會重新開機。（開發者模式的選項要接過 Mac、或在 Xcode 的「Devices and Simulators」看過這支手機之後才會出現。）
+3. iPhone 解鎖，接上傳輸線（或跟 Mac 連同一個 Wi-Fi）。
+4. 打開 Terminal，執行：
 
 ```
 bash ~/Downloads/fangfang-cards-main/install.sh
 ```
 
+5. 第一次在 iPhone／iPad 打開 App 時，如果說「未受信任的開發者」：**設定 → 一般 → VPN 與裝置管理**，點你的 Apple ID，按「信任」。
+
 它會自動建置 App，安裝到所有找得到的 iPhone／iPad，**也會裝一份到 Mac**（「應用程式」資料夾裡的「方方詞卡」）。
 
 - 只裝手機／平板：`install.sh ios`；只裝 Mac：`install.sh mac`
-- 免費 Apple ID：iPhone／iPad 版 **7 天後再執行一次同一個指令**就好。Mac 版只在你自己的 Mac 上執行，不會過期。
-- 第一次執行時，如果專案裡還沒有詞典資料，它會自動從教育部網站下載 `kautian.ods` 再整理成 App 用的資料（見下面「詞典資料」）。
+- 免費 Apple ID：iPhone／iPad 版 **7 天後再執行一次同一個指令**就好（資料不會不見）。Mac 版只在你自己的 Mac 上執行，不會過期。
+- 第一次執行時，如果專案裡還沒有詞典資料，它會自動從教育部網站下載 `kautian.ods` 再整理成 App 用的資料（見下面「詞典資料」），大概要幾分鐘。
+- App 的 ID 會用你自己的開發者團隊產生（`com.fangfangcards.你的團隊ID`），因為每個 ID 只能有一個人用。想用別的 ID：`FANGFANG_ID=com.你的名字.fangfang bash …/install.sh`。
+- 建置失敗的話，Terminal 會列出錯誤訊息，完整紀錄在 `~/Library/Logs/fangfangcards-build.log`。
 
-專案會放在家目錄的 `FangfangCards` 資料夾。想用 Xcode 打開也可以：雙擊 `~/FangfangCards/FangfangCards.xcodeproj`，上方選你的 iPhone 或「My Mac」，按 ▶。
+專案會放在家目錄的 `FangfangCards` 資料夾。想用 Xcode 打開也可以：雙擊 `~/FangfangCards/FangfangCards.xcodeproj`，上方選你的 iPhone 或「My Mac」，按 ▶（第一次要在專案設定的 Signing & Capabilities 選你的 Team，並把 Build Settings 裡的 `FF_ID` 改成你自己的，例如 `com.你的名字.fangfang`）。
 
 ### Mac 版
 
@@ -61,7 +71,7 @@ bash build-data.sh ~/Downloads/kautian.ods   # 或用已經下載的檔案
 - **方方快速查詞**：不打開 App，直接回傳漢字、讀音和意思（文字），可以接到其他捷徑動作。
 也可以跟 Siri 說「在方方詞卡查詞」，或把它放到主畫面、動作按鈕、分享選單（搭配「要求輸入」或「從輸入取得文字」）。
 
-**分類詞卡（小工具）**：主畫面長按 → 加入小工具 → 方方詞卡，有 4×2（中）和 4×4（大）兩種。長按小工具 → 編輯小工具，選一個分類（或「常用詞」）。小工具會顯示詞、羅馬字、方音、意思和那個意思的例句（照 App 設定的羅馬字和腔口），每個鐘頭換一個詞，「熟悉」的詞不會出現。按鈕：▶ 聽發音（大的小工具也可以聽例句）、收藏（下次打開 App 時加到收藏）、✓ 標成熟悉（換下一個詞，下次打開 App 時移到「熟悉」）、→ 換下一個詞。第一次要先打開 App 一次，小工具才有詞。（小工具和 App 用 App Group 共用資料，ID 在專案設定的 `APP_GROUP`；如果你改了 App 的 Bundle ID，這個也要一起改。）
+**分類詞卡（小工具）**：主畫面長按 → 加入小工具 → 方方詞卡，有 4×2（中）和 4×4（大）兩種。長按小工具 → 編輯小工具，選一個分類（或「常用詞」）。小工具會顯示詞、羅馬字、方音、意思和那個意思的例句（照 App 設定的羅馬字和腔口），每個鐘頭換一個詞，「熟悉」的詞不會出現。按鈕：▶ 聽發音（大的小工具也可以聽例句）、收藏（下次打開 App 時加到收藏）、✓ 標成熟悉（換下一個詞，下次打開 App 時移到「熟悉」）、→ 換下一個詞。第一次要先打開 App 一次，小工具才有詞。（小工具和 App 用 App Group 共用資料，App 的 ID 和 App Group 都由專案設定的 `FF_ID` 決定（App = `FF_ID`，小工具 = `FF_ID.widget`，App Group = `group.FF_ID`），改這一個就好。）
 
 **練習題型**：看意思選台語詞、看台語詞選意思、聽發音選詞、例句填空、看漢字選讀音。連續答對 3 次（可以改）就學會，自動移到「熟悉」。
 
