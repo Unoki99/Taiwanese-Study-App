@@ -60,6 +60,13 @@ final class ConvertEngine {
         (0x41...0x5A).contains(v) || (0x61...0x7A).contains(v) || (0xC0...0x24F).contains(v) && v != 0xD7 && v != 0xF7 ||
         (0x1E00...0x1EFF).contains(v)
     }
+    /// is position j right after an o (with only tone marks between)?
+    static func afterO(_ u: [Unicode.Scalar], _ j: Int) -> Bool {
+        var k = j - 1
+        while k >= 0 && (0x300...0x36F).contains(u[k].value) && u[k].value != 0x0358 { k -= 1 }
+        guard k >= 0 else { return false }
+        return u[k] == "o" || u[k] == "O" || "òóôōŏőǒȯöÒÓÔŌǑ".unicodeScalars.contains(u[k])
+    }
     static func isMark(_ v: UInt32) -> Bool { (0x300...0x36F).contains(v) || v == 0x207F }
 
     // MARK: 方音 input
@@ -118,9 +125,29 @@ final class ConvertEngine {
     // MARK: Latin input
 
     private static let toneMark: [UInt32: String] = [0x301: "2", 0x300: "3", 0x302: "5", 0x30C: "6", 0x304: "7", 0x30D: "8", 0x30B: "9"]
+    /// 白話字 o͘ (also typed o·): → "oo", wherever the dot is among the marks on the o (ó͘ is o + ´ + ͘)
+    static let pojDots: Set<UInt32> = [0x0358, 0x00B7, 0x0387, 0x2022, 0x22C5, 0x30FB, 0xFF65, 0x2027]
+    static func pojOO(_ s: String) -> String {
+        var out = String.UnicodeScalarView()
+        var marks: [Unicode.Scalar] = []          // tone marks after the last letter
+        var lastO = false
+        func flush() { out.append(contentsOf: marks); marks = [] }
+        for u in s.unicodeScalars {
+            if pojDots.contains(u.value) {
+                if lastO { out.append("o"); lastO = false }   // o + dot = oo; the tone mark stays after it
+                continue
+            }
+            if (0x300...0x36F).contains(u.value) { marks.append(u); continue }
+            flush()
+            out.append(u)
+            lastO = u == "o" || u == "O"
+        }
+        flush()
+        return String(out)
+    }
+
     static func romKey(_ word: String) -> String? {
-        var s = word.decomposedStringWithCanonicalMapping.lowercased()
-            .replacingOccurrences(of: "o\u{0358}", with: "oo").replacingOccurrences(of: "\u{0358}", with: "")
+        var s = ConvertEngine.pojOO(word.decomposedStringWithCanonicalMapping.lowercased())
             .replacingOccurrences(of: "ⁿ", with: "nn")
         var tone = ""
         var letters = ""
@@ -150,7 +177,8 @@ final class ConvertEngine {
             }
             if ConvertEngine.isLatinLetter(v) || ConvertEngine.isMark(v) {
                 var j = i
-                while j < u.count && (ConvertEngine.isLatinLetter(u[j].value) || ConvertEngine.isMark(u[j].value)) { j += 1 }
+                while j < u.count && (ConvertEngine.isLatinLetter(u[j].value) || ConvertEngine.isMark(u[j].value)
+                                      || (ConvertEngine.pojDots.contains(u[j].value) && ConvertEngine.afterO(u, j))) { j += 1 }
                 if j < u.count, (0x31...0x39).contains(u[j].value) { j += 1 }
                 atoms.append(.latin(str(i, j))); i = j; continue
             }
@@ -166,7 +194,7 @@ final class ConvertEngine {
         func look(_ sys: String, _ w: String, _ rk: String?) -> [String]? {
             switch sys {
             case "lat": return d.latRev[w.lowercased()]
-            case "tl": return (rk != nil && !w.contains("ⁿ") && !w.contains("\u{0358}")) ? d.tlRev[rk!] : nil
+            case "tl": return (rk != nil && !w.contains("ⁿ") && !w.unicodeScalars.contains { ConvertEngine.pojDots.contains($0.value) }) ? d.tlRev[rk!] : nil
             default: return rk.flatMap { d.pojRev[$0] }
             }
         }

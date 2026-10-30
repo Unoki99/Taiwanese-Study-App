@@ -216,8 +216,8 @@ final class Dict: @unchecked Sendable {
 
     /// a romanized syllable without tone: lower case, no marks, no tone number
     static func plainKey(_ s: String) -> String {
-        let t = s.lowercased().decomposedStringWithCanonicalMapping
-            .replacingOccurrences(of: "o\u{0358}", with: "oo").replacingOccurrences(of: "ⁿ", with: "nn")
+        let t = ConvertEngine.pojOO(s.lowercased().decomposedStringWithCanonicalMapping)
+            .replacingOccurrences(of: "ⁿ", with: "nn")
         var out = ""
         for u in t.unicodeScalars where !(0x300...0x36F).contains(u.value) && !("0"..."9").contains(Character(u)) {
             out.unicodeScalars.append(u)
