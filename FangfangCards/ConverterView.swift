@@ -113,7 +113,6 @@ struct DictTabs: View {
                 Text("分類").tag(1)
                 Text("收藏").tag(2)
                 Text("自訂").tag(4)
-                Text("文法").tag(5)
             }
             .pickerStyle(.segmented)
             .padding(.horizontal).padding(.top, 6).padding(.bottom, 4)
@@ -123,7 +122,6 @@ struct DictTabs: View {
                 case 2: SavedPane(dict: dict)
                 case 3: PronunciationPane(dict: dict)
                 case 4: OwnPane(dict: dict)
-                case 5: GrammarPane(dict: dict)
                 default: LookupPane(dict: dict)
                 }
             }

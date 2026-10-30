@@ -14,6 +14,8 @@ struct SettingsView: View {
     @AppStorage("place") private var place = -1
     @AppStorage("syncDevices") private var syncDevices = true
     @AppStorage(TextSize.key) private var textSize = TextSize.standard
+    @AppStorage(ToneColors.key) private var toneSys = 0
+    @AppStorage(ToneColors.marksKey) private var toneMarks = true
     @State private var pickFolder = false
 
     @State private var shareItem: ShareItem?
@@ -33,6 +35,15 @@ struct SettingsView: View {
                     ForEach(Array(store.places.enumerated()), id: \.offset) { i, p in Text(p).tag(i) }
                 }
                 .onChange(of: place) { if place >= 0 { store.loadDict() } }
+                Picker("聲調顏色", selection: $toneSys) {
+                    Text("關").tag(0)
+                    Text("七聲").tag(7)
+                    Text("五聲").tag(5)
+                }
+                .pickerStyle(.menu)
+                if toneSys != 0 {
+                    Toggle("聲調符號照變調寫", isOn: $toneMarks)
+                }
                 Toggle("卡片先隱藏意思（點一下才顯示）", isOn: $hideMeaning)
                 Toggle("Liquid Glass 效果", isOn: $glassOn)
                 #if targetEnvironment(macCatalyst)

@@ -347,7 +347,11 @@ struct ToneMenu: View {
     private var dots: some View {
         HStack(spacing: 2) {
             if system == 0 {
+                #if targetEnvironment(macCatalyst)
+                Text("聲調").ffFont(.subheadline, .bold).foregroundStyle(T.glyph)
+                #else
                 Text("調").ffFont(.subheadline, .bold).foregroundStyle(T.muted)
+                #endif
             } else {
                 ForEach(system == 5 ? [1, 2, 3, 5, 7] : [1, 2, 3, 4, 5, 7, 8], id: \.self) { t in
                     Circle().fill(ToneColors.color(t, system) ?? T.muted).frame(width: 5, height: 5)
@@ -377,9 +381,13 @@ struct ToneGlow: ViewModifier {
     @AppStorage(ToneColors.key) private var system = 0
     @ViewBuilder func body(content: Content) -> some View {
         if system != 0 {
-            content
-                .background(content.blur(radius: 5).opacity(0.9).allowsHitTesting(false).accessibilityHidden(true))
-                .background(content.blur(radius: 1.5).opacity(0.6).allowsHitTesting(false).accessibilityHidden(true))
+            // a ZStack (not .background) so the blurred copies get the same width as the text and wrap the
+            // same way; a background copy is laid out again at the text's measured size and can wrap differently
+            ZStack {
+                content.blur(radius: 5).opacity(0.9).allowsHitTesting(false).accessibilityHidden(true)
+                content.blur(radius: 1.5).opacity(0.6).allowsHitTesting(false).accessibilityHidden(true)
+                content
+            }
         } else {
             content
         }
