@@ -1415,6 +1415,12 @@ struct ExampleBlock: View {
     @AppStorage("place") private var place = -1
     @State private var swapWord: String?                  // the word picker for a place's own words
     @State private var swapZh: String?                    // …and the 華語 translation of its sentence
+    // hold a finger on the sentence and slide over the words: the word under the finger swells,
+    // letting go opens it (iPhone / iPad)
+    @State private var wordFrames: [Int: CGRect] = [:]
+    @State private var scrubIndex: Int?
+    @State private var scrubbing = false
+    @State private var scrubSpace = UUID()
     @AppStorage("ff-swaps") private var swapsJSON = ""     // your choices (redraws when they change)
     @AppStorage("ff-swap-off") private var swapOffJSON = "" // sentences with the 在地詞 switch off
     @AppStorage(ToneColors.key) private var toneSys = 0
@@ -1572,24 +1578,65 @@ struct ExampleBlock: View {
             guard let tones else { var a = AttributedString(pieces[i].text); a.swiftUI.foregroundColor = ink; return a }
             return dict.hanToneText(pieces[i].text, tones: Array(tones.dropFirst(starts[i])), system: toneSys, base: ink)
         }
-        return FlowLayout(spacing: 0, lineSpacing: -4) {     // taller boxes, lines as close as before
+        // what tapping word i does (nil = not a button)
+        func action(_ i: Int) -> (() -> Void)? {
+            let p = pieces[i]
+            if let orig = p.swapOf { return { swapWord = orig; swapZh = zh } }
+            if let k = p.key, k != own { return { onWord(k) } }
+            return nil
+        }
+        let layout = FlowLayout(spacing: 0, lineSpacing: -4) {     // taller boxes, lines as close as before
             ForEach(Array(pieces.enumerated()), id: \.offset) { i, p in
                 if let orig = p.swapOf {
-                    Button { swapWord = orig; swapZh = zh } label: {
+                    Button { if !scrubbing { swapWord = orig; swapZh = zh } } label: {
                         wordLabel(colored(i, p.swapped ? T.swapInk : T.glyph), line: T.swapInk.opacity(0.8))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SwellButtonStyle(hot: scrubIndex == i))
+                    .background(frameReader(i))
                 } else if let k = p.key, k != own {
-                    Button { onWord(k) } label: {
+                    Button { if !scrubbing { onWord(k) } } label: {
                         wordLabel(colored(i, T.blueInk), line: T.blueInk.opacity(0.45))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(SwellButtonStyle(hot: scrubIndex == i))
+                    .background(frameReader(i))
                 } else {
                     Text(colored(i, p.key != nil && p.key == own ? T.oliveInk : T.glyph)).toneGlow().ffFont(.body)
                         .padding(.vertical, 7).padding(.horizontal, 2)
                         .background(RoundedRectangle(cornerRadius: 4).fill(boxedOwn && p.key != nil && p.key == own ? T.olive.opacity(0.6) : .clear))
                 }
             }
+        }
+        #if targetEnvironment(macCatalyst)
+        return layout
+        #else
+        return layout
+            .coordinateSpace(name: scrubSpace)
+            .onPreferenceChange(WordFramesKey.self) { wordFrames = $0 }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.3)
+                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(scrubSpace)))
+                    .onChanged { v in
+                        guard case .second(true, let drag) = v else { return }
+                        if !scrubbing { scrubbing = true; Haptics.start() }
+                        guard let drag else { return }
+                        let hit = wordFrames.first { $0.value.insetBy(dx: -4, dy: -2).contains(drag.location) }?.key
+                        if hit != scrubIndex { scrubIndex = hit; if hit != nil { Haptics.tick() } }
+                    }
+                    .onEnded { _ in
+                        let open = scrubIndex.flatMap(action)
+                        scrubIndex = nil
+                        open?()
+                        // the word's own button may fire too when the finger lifts: ignore it for a moment
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrubbing = false }
+                    }
+            )
+        #endif
+    }
+
+    /// where word i is (for sliding over the words)
+    private func frameReader(_ i: Int) -> some View {
+        GeometryReader { g in
+            Color.clear.preference(key: WordFramesKey.self, value: [i: g.frame(in: .named(scrubSpace))])
         }
     }
 
@@ -1598,7 +1645,6 @@ struct ExampleBlock: View {
         Text(t).ffFont(.body).toneGlow()
             .padding(.vertical, 7).padding(.horizontal, 2)
             .contentShape(Rectangle())
-            .modifier(HoverSwell())
     }
 
 }
@@ -2072,15 +2118,62 @@ struct PronunciationPane: View {
 
 
 /// a word under the pointer (iPad trackpad / mouse, Mac) swells a little, like app icons on the iPad
-struct HoverSwell: ViewModifier {
-    @State private var on = false
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(on ? 1.18 : 1)
-            .shadow(color: .black.opacity(on ? 0.35 : 0), radius: on ? 4 : 0, y: on ? 2 : 0)
-            .zIndex(on ? 1 : 0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.65), value: on)
-            .onHover { on = $0 }
+/// a word in an example sentence grows a little while it's pressed, under the pointer (Mac, iPad with a
+/// trackpad), or under the finger while sliding over the words (`hot`)
+struct SwellButtonStyle: ButtonStyle {
+    var hot = false
+    func makeBody(configuration: Configuration) -> some View {
+        SwellBody(label: configuration.label, on: configuration.isPressed || hot)
+    }
+}
+
+private struct SwellBody<L: View>: View {
+    let label: L
+    let on: Bool
+    @State private var hover = false
+    var body: some View {
+        let big = on || hover
+        #if targetEnvironment(macCatalyst)
+        // Mac: the word (with its glow) is drawn once into a picture, and only that picture grows, so
+        // the blur of the tone glow isn't worked out again on every frame. The extra 8 points around it
+        // keep the glow from being cut off; the -8 gives the room back, so the line doesn't move.
+        // No shadow (another blur), and a short ease instead of a spring (fewer frames).
+        label
+            .padding(8)
+            .drawingGroup()
+            .padding(-8)
+            .scaleEffect(big ? 1.15 : 1)
+            .zIndex(big ? 1 : 0)
+            .animation(.easeOut(duration: 0.14), value: big)
+            .onHover { hover = $0 }
+        #else
+        label
+            .scaleEffect(big ? 1.18 : 1)
+            .shadow(color: .black.opacity(big ? 0.35 : 0), radius: big ? 4 : 0, y: big ? 2 : 0)
+            .zIndex(big ? 1 : 0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.65), value: big)
+            .onHover { hover = $0 }
+        #endif
+    }
+}
+
+struct WordFramesKey: PreferenceKey {
+    static let defaultValue: [Int: CGRect] = [:]
+    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
+enum Haptics {
+    @MainActor static func start() {
+        #if !targetEnvironment(macCatalyst)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+    }
+    @MainActor static func tick() {
+        #if !targetEnvironment(macCatalyst)
+        UISelectionFeedbackGenerator().selectionChanged()
+        #endif
     }
 }
 
