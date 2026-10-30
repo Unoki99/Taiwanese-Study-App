@@ -69,6 +69,7 @@ struct WordEntry: TimelineEntry {
     let saved: Bool
     var known = false
     var empty: String? = nil
+    var bg: Double = 0.45
 }
 
 struct WordProvider: AppIntentTimelineProvider {
@@ -99,7 +100,7 @@ struct WordProvider: AppIntentTimelineProvider {
         let all = WidgetShared.words(catID)
         guard !all.isEmpty else {
             return WordEntry(date: date, word: nil, category: catID, categoryName: name, rom: st.rom, saved: false,
-                             empty: "打開方方詞卡一次，小工具就會載入詞。")
+                             empty: "打開方方詞卡一次，小工具就會載入詞。", bg: st.bg ?? 0.45)
         }
         let known = WidgetShared.knownNow()
         let hourIndex = Int(date.timeIntervalSince1970 / 3600)
@@ -120,7 +121,7 @@ struct WordProvider: AppIntentTimelineProvider {
             if isNow { WidgetShared.pin(catID, slot: slot, key: w.k) }
         }
         return WordEntry(date: date, word: w, category: catID, categoryName: name, rom: st.rom,
-                         saved: WidgetShared.savedNow().contains(w.k), known: known.contains(w.k))
+                         saved: WidgetShared.savedNow().contains(w.k), known: known.contains(w.k), bg: st.bg ?? 0.45)
     }
 
     /// splitmix64: spreads the hour / → count over the whole list
@@ -134,5 +135,9 @@ struct WordProvider: AppIntentTimelineProvider {
     static let sample = WidgetWord(
         k: "食飯\tcia8 pNG7", h: "食飯", a: nil, r: ["jia̍h-pn̄g", "tsia̍h-pn̄g", "chia̍h-pn̄g"], z: "ㄐㄧㄚㆷ̇ ㄅㆭ˫",
         p: "動詞", m: "吃飯。", xh: "咱來去食飯。", xr: ["Lán lâi-khì jia̍h-pn̄g.", "Lán lâi-khì tsia̍h-pn̄g.", "Lán lâi-khì chia̍h-pn̄g."],
-        xz: "我們去吃飯。", xn: nil)
+        xz: "我們去吃飯。", xn: nil,
+        hc: [WSeg(t: "食", c: "ff8cc6"), WSeg(t: "飯", c: "ffe066")],
+        rc: [[WSeg(t: "jia̍h", c: "ff8cc6"), WSeg(t: "-", c: nil), WSeg(t: "pn̄g", c: "ffe066")],
+             [WSeg(t: "tsia̍h", c: "ff8cc6"), WSeg(t: "-", c: nil), WSeg(t: "pn̄g", c: "ffe066")],
+             [WSeg(t: "chia̍h", c: "ff8cc6"), WSeg(t: "-", c: nil), WSeg(t: "pn̄g", c: "ffe066")]])
 }

@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage(TextSize.key) private var textSize = TextSize.standard
     @AppStorage(ToneColors.key) private var toneSys = 0
     @AppStorage(SwellTest.key) private var swellTest = SwellTest.standard
+    @AppStorage("widgetBG") private var widgetBG = 0.45
     @AppStorage(SwellTest.animKey) private var swellAnim = SwellTest.animStandard
     @AppStorage(ToneColors.marksKey) private var toneMarks = true
     @AppStorage(ToneColors.glowKey) private var toneGlow = ToneColors.glowStandard
@@ -72,6 +73,26 @@ struct SettingsView: View {
                 }
                 Text("也可以用 ⌘+ 放大、⌘− 縮小、⌘0 回到原本大小（接鍵盤的時候）。").ffFont(.footnote).foregroundStyle(T.muted)
                 }
+            }
+            Section {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("背景")
+                        Spacer()
+                        Text(widgetBG < 0.05 ? "透明" : (widgetBG > 0.95 ? "不透明" : "\(Int((widgetBG * 100).rounded()))%"))
+                            .foregroundStyle(T.muted).monospacedDigit()
+                    }
+                    HStack(spacing: 10) {
+                        Image(systemName: "circle.dashed").foregroundStyle(T.muted)
+                        Slider(value: $widgetBG, in: 0...1, step: 0.05)
+                        Image(systemName: "circle.fill").foregroundStyle(T.muted)
+                    }
+                }
+                .onChange(of: widgetBG) { WidgetBridge.progressChanged(store) }
+            } header: {
+                Text("小工具")
+            } footer: {
+                Text("越往左越透明，看得到桌布（iOS 26 以上）。字會加一點陰影，比較好讀。")
             }
             Section("發音") {
                 Toggle("新卡片自動播放發音", isOn: $autoPlay)

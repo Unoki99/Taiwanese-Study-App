@@ -41,6 +41,7 @@ struct RootView: View {
     @AppStorage("place") private var place = -1
     @AppStorage("rom") private var rom = 0
     @AppStorage(ToneColors.key) private var toneSys = 0
+    @AppStorage(ToneColors.marksKey) private var toneMarks = true
 
     private var tabs: some View {
         TabView(selection: $router.tab) {
@@ -92,7 +93,8 @@ struct RootView: View {
         // the 分類 widgets: new spelling, the word list once loaded, local readings once the dictionary is there
         .onChange(of: rom) { WidgetBridge.writeState(store) }
         // 聲調顏色 needs the dictionary (word classes, readings in sentences)
-        .onChange(of: toneSys) { if toneSys != 0 { store.loadDict() } }
+        .onChange(of: toneSys) { if toneSys != 0 { store.loadDict() }; WidgetBridge.rebuildIfNeeded(store) }
+        .onChange(of: toneMarks) { WidgetBridge.rebuildIfNeeded(store) }
         .onChange(of: store.loaded) { WidgetBridge.appOpened(store) }
         .onChange(of: store.dict != nil) { WidgetBridge.rebuildIfNeeded(store) }
     }

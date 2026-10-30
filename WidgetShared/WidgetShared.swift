@@ -21,6 +21,18 @@ struct WidgetWord: Codable, Hashable {
     let xr: [String]?        // example 皓羅, 台羅, 白話字
     let xz: String?          // example 華語
     let xn: String?          // example recording name
+    // the same texts in colour (聲調顏色, guessed readings…), piece by piece; nil in older files
+    var hc: [WSeg]? = nil    // 漢字
+    var rc: [[WSeg]]? = nil  // 皓羅, 台羅, 白話字
+    var zc: [WSeg]? = nil    // 方音
+    var xhc: [WSeg]? = nil   // example 漢字
+    var xrc: [[WSeg]]? = nil // example 皓羅, 台羅, 白話字
+}
+
+/// a piece of text in one colour ("rrggbb"; nil = the widget's own colour for that line)
+struct WSeg: Codable, Hashable {
+    let t: String
+    let c: String?
 }
 
 struct WidgetCategory: Codable, Hashable {
@@ -34,6 +46,8 @@ struct WidgetState: Codable {
     var place = -1
     var saved: [String] = []
     var known: [String] = []
+    /// how solid the widget background is (0 = see-through, 1 = solid); 設定 → 小工具
+    var bg: Double? = nil
 }
 
 /// a 收藏 change made on the widget: the app applies it the next time it's opened
