@@ -372,7 +372,7 @@ struct ToneMenu: View {
                 Text("調").ffFont(.subheadline, .bold).foregroundStyle(T.muted)
                 #endif
             } else {
-                ForEach(system == 5 ? [1, 2, 3, 5, 7] : [1, 2, 3, 4, 5, 7, 8], id: \.self) { t in
+                ForEach(system == 5 ? [1, 2, 3, 5, 6, 7] : [1, 2, 3, 4, 5, 6, 7, 8], id: \.self) { t in
                     Circle().fill(ToneColors.color(t, system) ?? T.muted).frame(width: 5, height: 5)
                 }
             }

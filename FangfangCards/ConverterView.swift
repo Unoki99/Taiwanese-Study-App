@@ -1088,6 +1088,7 @@ struct LookupResult: Sendable {
     var defs: [String] = []
     var places: [(zh: String, rows: [(han: String, codes: String, places: [Int])])] = []
     var tones: [String] = []                  // words with a tone pattern (4-5)
+    var toneNote: String? = nil               // why a tone search found nothing (tone 6 in 通行)
     var sentences: [Dict.SentenceHit] = []    // example sentences that use the 台語 word(s) found
     var sentenceWords: [String] = []          // …those words (漢字), for the title
     var empty: Bool { tones.isEmpty && taigi.isEmpty && contains.isEmpty && pattern.isEmpty && patternZh.isEmpty && exact.isEmpty && gloss.isEmpty && defs.isEmpty && places.isEmpty }
@@ -1186,14 +1187,20 @@ enum Lookup {
         return Array(keys.sorted { d.score(Dict.hanOf($0), Dict.codesOf($0)) > d.score(Dict.hanOf($1), Dict.codesOf($1)) }.prefix(120))
     }
 
-    static func run(_ d: Dict, _ q0: String) -> LookupResult {
+    static func run(_ d: Dict, _ q0: String, place: Int = -1) -> LookupResult {
         let q = q0.trimmingCharacters(in: .whitespacesAndNewlines)
         var r = LookupResult()
         guard !q.isEmpty else { return r }
         if q.contains(where: { "*＊?？".contains($0) }) { return wildcard(d, q) }
         // a tone pattern: 4-5, 45, 4 5 (1–8 syllables)
         if q.range(of: #"^[1-9](?:[-\s]?[1-9]){0,7}$"#, options: .regularExpression) != nil {
-            r.tones = toneSearch(d, q.filter { $0.isNumber }.compactMap { $0.wholeNumberValue })
+            let ts = q.filter { $0.isNumber }.compactMap { $0.wholeNumberValue }
+            r.tones = toneSearch(d, ts, place: place)
+            if r.tones.isEmpty && ts.contains(6) {
+                r.toneNote = place < 0
+                    ? "通行讀音沒有第 6 聲。先在上方選一個有第 6 聲的腔口（例如鹿港），再查一次。"
+                    : "這個腔口找不到這個聲調組合的詞。第 6 聲只有部分腔口有（例如鹿港）。"
+            }
             return r
         }
         if q.unicodeScalars.contains(where: { ConvertEngine.isZy($0.value) || ConvertEngine.isLatinLetter($0.value) }) {
@@ -1247,10 +1254,12 @@ enum Lookup {
     }
 
     /// words whose syllables have exactly these tones (as written in the dictionary), most common first
-    static func toneSearch(_ d: Dict, _ tones: [Int]) -> [String] {
+    /// words whose syllables have these tones, in the chosen place's readings (so tone 6 is found
+    /// where the place has it, e.g. 鹿港)
+    static func toneSearch(_ d: Dict, _ tones: [Int], place: Int = -1) -> [String] {
         var out: [(k: String, s: Double)] = []
         for w in d.raw.words where w.count == 2 {
-            let cs = w[1].split(separator: " ")
+            let cs = (place >= 0 ? d.codesFor(w[0] + "\t" + w[1], place) : w[1]).split(separator: " ")
             guard cs.count == tones.count, w[0].count == tones.count else { continue }
             if zip(cs, tones).allSatisfy({ $0.0.last?.wholeNumberValue == $0.1 }) {
                 out.append((w[0] + "\t" + w[1], d.score(w[0], w[1])))
@@ -1321,6 +1330,9 @@ struct LookupPane: View {
             if !result.tones.isEmpty {
                 group("聲調「\(query.filter { $0.isNumber }.map(String.init).joined(separator: "-"))」（\(result.tones.count >= 1000 ? "1000+" : String(result.tones.count))）", result.tones)
             }
+            if let note = result.toneNote {
+                Text(note).ffFont(.footnote).foregroundStyle(T.muted).listRowBackground(Color.clear)
+            }
             group("台語「\(query)」", result.taigi)
             group("台語講法", result.exact)
             more
@@ -1334,6 +1346,7 @@ struct LookupPane: View {
             Task.detached(priority: .utility) { _ = d.sentences(with: ["\t"]) }
         }
         .onChange(of: query) { search() }
+        .onChange(of: place) { search() }
     }
 
     /// everything else, as a short list of pages right under 台語講法 (less to scroll)
@@ -1387,11 +1400,11 @@ struct LookupPane: View {
 
     private func search() {
         task?.cancel()
-        let q = query, d = dict
+        let q = query, d = dict, pl = place
         task = Task {
             try? await Task.sleep(nanoseconds: 200_000_000)
             guard !Task.isCancelled else { return }
-            let r = await Task.detached(priority: .userInitiated) { Lookup.run(d, q) }.value
+            let r = await Task.detached(priority: .userInitiated) { Lookup.run(d, q, place: pl) }.value
             guard !Task.isCancelled else { return }
             result = r
         }
