@@ -16,7 +16,7 @@ iPhone／iPad 的台語單詞卡 App。像交友 App 一樣滑卡片：
 3. 打開 Terminal，執行：
 
 ```
-bash ~/Downloads/fangfang-cards/install.sh
+bash ~/Downloads/fangfang-cards-main/install.sh
 ```
 
 它會自動建置 App，安裝到所有找得到的 iPhone／iPad，**也會裝一份到 Mac**（「應用程式」資料夾裡的「方方詞卡」）。
