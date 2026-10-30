@@ -367,20 +367,17 @@ struct ConvertPane: View {
                 }
                 .foregroundStyle(T.muted)
             }
-            Text(attributed(pieces, ink: ink, mode: mode)).toneGlow()
-                .scaledFont(mode == 0 ? 22 : 20, on: mode != 1)
-                .latFont(19)   // 羅馬字 box (the other boxes set their own size just above)
-                .tint(ink)
-                .lineSpacing(5)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .environment(\.openURL, OpenURLAction { url in
-                    if url.scheme == "ff", let i = Int(url.lastPathComponent) {
-                        focused = false
-                        openItem = ConvSelection(index: i)
-                    }
-                    return .handled
-                })
+            let sp = swellPieces(pieces, ink: ink, mode: mode)
+            SwellWords(pieces: sp.pieces, lineSpacing: 0, vPad: 3) { n in
+                if let i = sp.items[n], i >= 0 {
+                    focused = false
+                    openItem = ConvSelection(index: i)
+                }
+            }
+            .foregroundStyle(ink)
+            .scaledFont(mode == 0 ? 22 : 20, on: mode != 1)
+            .latFont(19)   // 羅馬字 box (the other boxes set their own size just above)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .glassSurface(RoundedRectangle(cornerRadius: 18))
@@ -420,10 +417,13 @@ struct ConvertPane: View {
         return ranges.mapValues { (tokens: $0.tokens, tones: Array(tones[$0.from..<$0.to])) }
     }
 
-    private func attributed(_ pieces: [(text: String, item: Int?)], ink: Color, mode: Int) -> AttributedString {
+    /// the output piece by piece (a piece's leading space included), ready to show; tappable words carry a link
+    private func attributedPieces(_ pieces: [(text: String, item: Int?)], ink: Color, mode: Int) -> [AttributedString] {
         if toneSys != 0 { return toneAttributed(pieces, ink: ink, mode: mode) }
-        var out = AttributedString()
+        var all: [AttributedString] = []
         for p in pieces {
+            var out = AttributedString()
+            defer { all.append(out) }
             var t = p.text
             if t.hasPrefix(" ") { out += AttributedString(" "); t.removeFirst() }
             var a = AttributedString(t)
@@ -457,14 +457,16 @@ struct ConvertPane: View {
             }
             out += a
         }
-        return out
+        return all
     }
 
     /// the output in tone colours (words still tappable, choices underlined, saved words shaded)
-    private func toneAttributed(_ pieces: [(text: String, item: Int?)], ink: Color, mode: Int) -> AttributedString {
+    private func toneAttributed(_ pieces: [(text: String, item: Int?)], ink: Color, mode: Int) -> [AttributedString] {
         let tones = itemTones()
-        var out = AttributedString()
+        var all: [AttributedString] = []
         for p in pieces {
+            var out = AttributedString()
+            defer { all.append(out) }
             var t = p.text
             if t.hasPrefix(" ") { out += AttributedString(" "); t.removeFirst() }
             guard let i = p.item, i >= 0, let tt = tones[i] else {
@@ -483,7 +485,30 @@ struct ConvertPane: View {
             }
             out += a
         }
-        return out
+        return all
+    }
+
+    /// the pieces for SwellWords: a word's link becomes its button (the link itself is taken off, so the
+    /// word keeps its colours); a space in front of a word moves to the end of the piece before it, so a
+    /// line never starts with a space; "\n" starts a new line
+    private func swellPieces(_ pieces: [(text: String, item: Int?)], ink: Color, mode: Int)
+        -> (pieces: [(text: AttributedString, tap: Bool, newLine: Bool)], items: [Int?]) {
+        let texts = attributedPieces(pieces, ink: ink, mode: mode)
+        var out: [(text: AttributedString, tap: Bool, newLine: Bool)] = [], items: [Int?] = []
+        var newLine = false
+        for (p, a0) in zip(pieces, texts) {
+            if p.text == "\n" { if newLine { out.append((AttributedString(" "), false, true)); items.append(nil) }; newLine = true; continue }
+            var a = a0
+            var tap = false
+            for r in a.runs where r.link != nil { tap = true; a[r.range].link = nil }
+            if a.characters.first == " " {
+                a.removeSubrange(a.startIndex..<a.index(afterCharacter: a.startIndex))
+                if !newLine, !out.isEmpty { out[out.count - 1].text += AttributedString(" ") }
+            }
+            out.append((a, tap, newLine)); items.append(p.item)
+            newLine = false
+        }
+        return (out, items)
     }
 
     /// dictionary words in the converted text, in order, once each
@@ -946,7 +971,9 @@ struct FlowLayout: Layout {
         var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, maxX: CGFloat = 0
         for s in subviews {
             let sz = s.sizeThatFits(.unspecified)
-            if x > 0 && x + sz.width > w { x = 0; y += row + (lineSpacing ?? spacing); row = 0 }
+            if (x > 0 && x + sz.width > w) || (s[FlowBreak.self] && (x > 0 || y > 0 || row > 0)) {
+                x = 0; y += row + (lineSpacing ?? spacing); row = 0
+            }
             x += sz.width + spacing; row = max(row, sz.height); maxX = max(maxX, x - spacing)
         }
         return CGSize(width: min(maxX, w), height: y + row)
@@ -955,10 +982,75 @@ struct FlowLayout: Layout {
         var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
         for s in subviews {
             let sz = s.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + sz.width > bounds.maxX { x = bounds.minX; y += row + (lineSpacing ?? spacing); row = 0 }
+            if (x > bounds.minX && x + sz.width > bounds.maxX) || (s[FlowBreak.self] && (x > bounds.minX || y > bounds.minY || row > 0)) {
+                x = bounds.minX; y += row + (lineSpacing ?? spacing); row = 0
+            }
             s.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(sz))
             x += sz.width + spacing; row = max(row, sz.height)
         }
+    }
+}
+
+/// in a FlowLayout: this piece starts a new line
+struct FlowBreak: LayoutValueKey { static let defaultValue = false }
+
+/// words in a row that wrap like text; the tappable ones swell when pressed or under the pointer, and
+/// (iPhone / iPad) holding a finger on them and sliding swells the word under it, letting go opens it
+struct SwellWords: View {
+    /// each piece: its text, whether it's tappable, whether it starts a new line
+    let pieces: [(text: AttributedString, tap: Bool, newLine: Bool)]
+    var lineSpacing: CGFloat = 0
+    var vPad: CGFloat = 4
+    let onTap: (Int) -> Void
+    @State private var frames: [Int: CGRect] = [:]
+    @State private var scrubIndex: Int?
+    @State private var scrubbing = false
+    @State private var space = UUID()
+
+    var body: some View {
+        let flow = FlowLayout(spacing: 0, lineSpacing: lineSpacing) {
+            ForEach(pieces.indices, id: \.self) { i in
+                let p = pieces[i]
+                Group {
+                    if p.tap {
+                        Button { if !scrubbing { onTap(i) } } label: {
+                            Text(p.text).toneGlow().padding(.vertical, vPad).contentShape(Rectangle())
+                        }
+                        .buttonStyle(SwellButtonStyle(hot: scrubIndex == i))
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: WordFramesKey.self, value: [i: g.frame(in: .named(space))])
+                        })
+                    } else {
+                        Text(p.text).toneGlow().padding(.vertical, vPad)
+                    }
+                }
+                .layoutValue(key: FlowBreak.self, value: p.newLine)
+            }
+        }
+        #if targetEnvironment(macCatalyst)
+        return flow
+        #else
+        return flow
+            .coordinateSpace(name: space)
+            .onPreferenceChange(WordFramesKey.self) { frames = $0 }
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.3)
+                    .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(space)))
+                    .onChanged { v in
+                        guard case .second(true, let drag) = v else { return }
+                        if !scrubbing { scrubbing = true; Haptics.start() }
+                        guard let drag else { return }
+                        let hit = frames.first { $0.value.insetBy(dx: -4, dy: -2).contains(drag.location) }?.key
+                        if hit != scrubIndex { scrubIndex = hit; if hit != nil { Haptics.tick() } }
+                    }
+                    .onEnded { _ in
+                        let open = scrubIndex
+                        scrubIndex = nil
+                        if let open { onTap(open) }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { scrubbing = false }
+                    }
+            )
+        #endif
     }
 }
 
@@ -2131,30 +2223,47 @@ private struct SwellBody<L: View>: View {
     let label: L
     let on: Bool
     @State private var hover = false
+    /// TEST: which way of swelling (設定 → 顯示 → 放大效果): 0 as before (shadow), 1 only grow, 2 drawn as a picture
+    @AppStorage(SwellTest.key) private var style = SwellTest.standard
     var body: some View {
         let big = on || hover
-        #if targetEnvironment(macCatalyst)
-        // Mac: the word (with its glow) is drawn once into a picture, and only that picture grows, so
-        // the blur of the tone glow isn't worked out again on every frame. The extra 8 points around it
-        // keep the glow from being cut off; the -8 gives the room back, so the line doesn't move.
-        // No shadow (another blur), and a short ease instead of a spring (fewer frames).
-        label
-            .padding(8)
-            .drawingGroup()
-            .padding(-8)
-            .scaleEffect(big ? 1.15 : 1)
-            .zIndex(big ? 1 : 0)
-            .animation(.easeOut(duration: 0.14), value: big)
-            .onHover { hover = $0 }
-        #else
-        label
-            .scaleEffect(big ? 1.18 : 1)
-            .shadow(color: .black.opacity(big ? 0.35 : 0), radius: big ? 4 : 0, y: big ? 2 : 0)
-            .zIndex(big ? 1 : 0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.65), value: big)
-            .onHover { hover = $0 }
-        #endif
+        switch style {
+        case 1:
+            // only grows: no shadow (a blur on every frame), no bringing to the front (re-arranges the sentence)
+            label
+                .scaleEffect(big ? 1.18 : 1)
+                .animation(.easeOut(duration: 0.15), value: big)
+                .onHover { hover = $0 }
+        case 2:
+            // the word (with its glow) is drawn once into a picture, and only the picture grows
+            label
+                .padding(8)
+                .drawingGroup()
+                .padding(-8)
+                .scaleEffect(big ? 1.16 : 1)
+                .zIndex(big ? 1 : 0)
+                .animation(.easeOut(duration: 0.14), value: big)
+                .onHover { hover = $0 }
+        default:
+            label
+                .scaleEffect(big ? 1.18 : 1)
+                .shadow(color: .black.opacity(big ? 0.35 : 0), radius: big ? 4 : 0, y: big ? 2 : 0)
+                .zIndex(big ? 1 : 0)
+                .animation(.spring(response: 0.25, dampingFraction: 0.65), value: big)
+                .onHover { hover = $0 }
+        }
     }
+}
+
+/// TEST setting: the three ways a word can swell, to find the smoothest on each device
+enum SwellTest {
+    static let key = "swellTest"
+    #if targetEnvironment(macCatalyst)
+    static let standard = 2
+    #else
+    static let standard = 0
+    #endif
+    static let names = ["原本（有影）", "只放大", "畫成圖再放大"]
 }
 
 struct WordFramesKey: PreferenceKey {

@@ -56,7 +56,7 @@ let PLACE_NAMES = ["鹿港偏泉腔", "三峽偏泉腔", "臺北偏泉腔", "宜
 /// It's in the top bar of every page except 設定.
 struct RomButton: View {
     @AppStorage("rom") private var rom = 0
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
     var body: some View {
         HStack(spacing: 6) {
             Button {
@@ -158,7 +158,7 @@ struct Panel<Content: View>: View {
 /// 腔口: 通行 or one of the 10 places
 struct PlaceMenu: View {
     @AppStorage("place") private var place = -1
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
     var body: some View {
         Menu {
             Picker("腔口", selection: $place) {

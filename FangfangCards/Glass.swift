@@ -16,7 +16,7 @@ struct GlassSurface<S: Shape>: ViewModifier {
     var interactive = false
     var fallback: Color = T.fn
     var edge: Color = T.fnEdge
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
 
     func body(content: Content) -> some View {
         if glassOn {
@@ -41,7 +41,7 @@ struct GlassSurface<S: Shape>: ViewModifier {
 /// when a big surface is dragged around, so the cards use this instead.)
 struct CardSurface: ViewModifier {
     var frosted = true                    // only the top card needs the (costly) blur
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -72,7 +72,7 @@ struct CardSurface: ViewModifier {
 
 struct ProminentButton: ViewModifier {
     var tint: Color = T.greenEdge
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
 
     func body(content: Content) -> some View {
         if glassOn {
@@ -102,7 +102,7 @@ struct MacSoftStyle: ButtonStyle {
 }
 
 struct SoftButton: ViewModifier {
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
 
     func body(content: Content) -> some View {
         #if targetEnvironment(macCatalyst)
@@ -139,7 +139,7 @@ extension View {
 /// Soft, slowly drifting colour light behind everything, in the 方方 key colours.
 struct AppBackground: View {
     @State private var move = false
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
 
     var body: some View {
         ZStack {

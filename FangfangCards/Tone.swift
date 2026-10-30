@@ -320,7 +320,7 @@ extension Dict {
 struct ToneMenu: View {
     @AppStorage(ToneColors.key) private var system = 0
     @AppStorage(ToneColors.marksKey) private var marks = true
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
     var body: some View {
         Menu {
             Picker("聲調顏色", selection: $system) {

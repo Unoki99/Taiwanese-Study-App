@@ -10,11 +10,12 @@ struct SettingsView: View {
     @AppStorage("goal") private var goal = 3
     @AppStorage("sessionSize") private var sessionSize = 10
     @AppStorage("audioBase") private var audioBase = Audio.defaultBase
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
     @AppStorage("place") private var place = -1
     @AppStorage("syncDevices") private var syncDevices = true
     @AppStorage(TextSize.key) private var textSize = TextSize.standard
     @AppStorage(ToneColors.key) private var toneSys = 0
+    @AppStorage(SwellTest.key) private var swellTest = SwellTest.standard
     @AppStorage(ToneColors.marksKey) private var toneMarks = true
     @State private var pickFolder = false
 
@@ -46,6 +47,10 @@ struct SettingsView: View {
                 }
                 Toggle("卡片先隱藏意思（點一下才顯示）", isOn: $hideMeaning)
                 Toggle("Liquid Glass 效果", isOn: $glassOn)
+                Picker("放大效果（測試）", selection: $swellTest) {
+                    ForEach(0..<3, id: \.self) { Text(SwellTest.names[$0]).tag($0) }
+                }
+                .pickerStyle(.menu)
                 #if targetEnvironment(macCatalyst)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {

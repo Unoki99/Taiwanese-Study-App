@@ -70,7 +70,7 @@ struct PlayButton: View {
     /// on a swipe card: frosted instead of Liquid Glass, which would stretch while the card is dragged
     var onCard = false
     @ObservedObject private var player = Player.shared
-    @AppStorage("glass") private var glassOn = true
+    @AppStorage("glass2") private var glassOn = false
 
     var body: some View {
         let on = player.playing == path
