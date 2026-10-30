@@ -11,7 +11,7 @@ iPhone／iPad 的台語單詞卡 App。像交友 App 一樣滑卡片：
 
 需要：
 
-- 一台 Mac，裝好 **Xcode**（App Store 免費下載），打開一次，在 **Xcode → Settings → Accounts** 用你的 Apple ID 登入（免費的 Apple ID 就可以）。
+- 一台 Mac，裝好 **Xcode 26 以上**（App Store 免費下載；需要 **macOS Sequoia 15.6 以上**，比較舊的 macOS 裝不了這麼新的 Xcode，也就不能建置這個 App），打開一次，在 **Xcode → Settings → Accounts** 用你的 Apple ID 登入（免費的 Apple ID 就可以）。
 - iPhone／iPad：iOS／iPadOS 17 以上；Mac 版：macOS 14 以上。
 
 步驟：
@@ -37,6 +37,17 @@ bash ~/Downloads/fangfang-cards-main/install.sh
 - 建置失敗的話，Terminal 會列出錯誤訊息，完整紀錄在 `~/Library/Logs/fangfangcards-build.log`。
 
 專案會放在家目錄的 `FangfangCards` 資料夾。想用 Xcode 打開也可以：雙擊 `~/FangfangCards/FangfangCards.xcodeproj`，上方選你的 iPhone 或「My Mac」，按 ▶（第一次要在專案設定的 Signing & Capabilities 選你的 Team，並把 Build Settings 裡的 `FF_ID` 改成你自己的，例如 `com.你的名字.fangfang`）。
+
+### 用 Sideloadly 安裝（Mac 太舊、不能裝 Xcode 26 的時候）
+
+1. 有新 Mac 的人執行 `install.sh ipa`，桌面會出現 `FangfangCards.ipa`，把這個檔案傳給對方。
+2. 對方在自己的電腦（Mac 10.12 以上，或 Windows）安裝免費的 [Sideloadly](https://sideloadly.io)。
+3. iPhone 用傳輸線接上電腦，解鎖，按「信任這部電腦」。
+4. 打開 Sideloadly，把 `FangfangCards.ipa` 拖進去，填自己的 Apple ID（要曾經在 iPhone 上登入過的），按 **Start**，輸入密碼（有雙重認證的話輸入驗證碼）。
+5. 第一次：iPhone 打開 **設定 → 隱私權與安全性 → 開發者模式**，打開並重新開機；再到 **設定 → 一般 → VPN 與裝置管理**，信任自己的 Apple ID。
+6. 免費 Apple ID：7 天後用 Sideloadly 再裝一次同一個檔案（不要先刪掉 App，資料才會留著）。
+
+用這個方法裝的話，「分類詞卡」小工具可能沒辦法用（App 本身都正常）。
 
 ### Mac 版
 

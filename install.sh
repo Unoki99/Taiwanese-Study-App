@@ -5,6 +5,7 @@
 #   bash ~/Downloads/fangfang-cards-main/install.sh mac      only Mac (Apple chip: asks once, iPad app or Mac version; Intel: the Mac version)
 #   bash ~/Downloads/fangfang-cards-main/install.sh ipad     only Mac, as the iPad app (Apple chip), and remember that
 #   bash ~/Downloads/fangfang-cards-main/install.sh catalyst only Mac, as the Mac version, and remember that
+#   bash ~/Downloads/fangfang-cards-main/install.sh ipa      an app file (FangfangCards.ipa on the Desktop) to install with Sideloadly
 # Run it again any time (e.g. every 7 days for iPhone/iPad) to reinstall.
 WHAT="${1:-all}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -25,9 +26,42 @@ if [ "$HERE" != "$DEST" ]; then
 fi
 echo "專案：$DEST/FangfangCards.xcodeproj"
 
+# Xcode new enough? (the project needs Xcode 26, which needs macOS Sequoia 15.6 or later)
+XV=$(xcodebuild -version 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)
+if [ -z "$XV" ]; then
+  echo "✗ 找不到 Xcode。請從 App Store 安裝 Xcode，打開一次，再執行這個指令。"; exit 1
+elif [ "$XV" -lt 26 ]; then
+  echo "✗ 這台 Mac 的 Xcode 是 $(xcodebuild -version | head -1)，太舊了：方方詞卡需要 Xcode 26 以上。"
+  echo "  Xcode 26 需要 macOS Sequoia 15.6 以上（這台是 macOS $(sw_vers -productVersion)）。"
+  echo "  請先更新 macOS 和 Xcode；如果這台 Mac 不能更新，請用另一台較新的 Mac 安裝。"
+  exit 1
+fi
+
 # 2. word data (built from the MOE dictionary file if it isn't there yet)
 if [ ! -f "$DEST/FangfangCards/dict.json" ] || [ ! -f "$DEST/FangfangCards/cards.json" ]; then
   bash "$DEST/build-data.sh" || { echo "✗ 沒辦法建立詞典資料。"; exit 1; }
+fi
+
+# "install.sh ipa": an app file (.ipa) for someone whose Mac can't build the app; they install it on their
+# iPhone/iPad with Sideloadly and their own Apple ID (Sideloadly signs it, so it's built unsigned here)
+if [ "$WHAT" = "ipa" ]; then
+  echo "建置 App 檔（.ipa）…"
+  IDD="$DD-ipa"
+  xcodebuild -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards -configuration Release \
+     -destination "generic/platform=iOS" -derivedDataPath "$IDD" \
+     CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+     build > "$LOG" 2>&1 < /dev/null || fail
+  APP=$(ls -d "$IDD"/Build/Products/Release-iphoneos/*.app | grep -v -i widget | head -1)
+  PKG=$(mktemp -d)
+  mkdir -p "$PKG/Payload"
+  cp -R "$APP" "$PKG/Payload/"
+  OUT="$HOME/Desktop/FangfangCards.ipa"
+  rm -f "$OUT"
+  (cd "$PKG" && zip -qry "$OUT" Payload)
+  rm -rf "$PKG"
+  echo "✓ App 檔：$OUT"
+  echo "  傳給對方，對方用 Sideloadly 安裝到 iPhone／iPad（見 README「用 Sideloadly 安裝」）。"
+  exit 0
 fi
 
 # 3. Apple developer team (only needed when the project doesn't have one, e.g. downloaded from GitHub)
@@ -47,21 +81,38 @@ if grep -q 'DEVELOPMENT_TEAM = "";' "$DEST/FangfangCards.xcodeproj/project.pbxpr
   FFID="${FANGFANG_ID:-com.fangfangcards.$(echo "$TEAM" | tr 'A-Z' 'a-z')}"
   TEAMARG=(DEVELOPMENT_TEAM="$TEAM" FF_ID="$FFID")
   IDARG=(FF_ID="$FFID")
+  # also write it into the project copy, so opening it in Xcode uses the same team and ID
+  sed -i '' -e "s/FF_ID = com.unoki99.fangfangcards;/FF_ID = $FFID;/" \
+            -e "s/DEVELOPMENT_TEAM = \"\";/DEVELOPMENT_TEAM = $TEAM;/" "$DEST/FangfangCards.xcodeproj/project.pbxproj"
 fi
 
 fail() {
   echo "✗ 建置失敗。把下面的錯誤訊息傳給 Claude："
   grep -E "error:|error -|Signing|provision" "$LOG" | sort -u | head -25
-  echo "（完整紀錄：$LOG）"
+  echo "（完整紀錄：${LOG}）"
   exit 1
+}
+
+# Build with signing. If the App Group (the widget's shared folder) isn't registered for your Apple ID
+# yet, build again without it: the app works normally, only the 分類詞卡 widget has no words.
+NOGROUP=()
+build_signed() {
+  xcodebuild "$@" "${NOGROUP[@]}" build > "$LOG" 2>&1 < /dev/null && return 0
+  if [ ${#NOGROUP[@]} -eq 0 ] && grep -q "application-groups" "$LOG"; then
+    echo "（你的 Apple ID 還沒註冊這個 App 的 App Group，先不用它建置：App 都正常，只是「分類詞卡」小工具會沒有詞。"
+    echo "  想用小工具：在 Xcode 打開 ~/FangfangCards/FangfangCards.xcodeproj，上方選你的 iPhone 按 ▶ 一次，"
+    echo "  Xcode 會自動註冊；之後再執行這個指令就好。）"
+    NOGROUP=(CODE_SIGN_ENTITLEMENTS="")
+    xcodebuild "$@" "${NOGROUP[@]}" build > "$LOG" 2>&1 < /dev/null && return 0
+  fi
+  return 1
 }
 
 # 4. iPhone / iPad (fresh 7-day signature)
 if [ "$WHAT" = "all" ] || [ "$WHAT" = "ios" ]; then
   echo "建置 iPhone／iPad 版…（第一次大概 1–2 分鐘）"
-  xcodebuild -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards -configuration Debug \
-     -destination "generic/platform=iOS" -derivedDataPath "$DD" -allowProvisioningUpdates "${TEAMARG[@]}" \
-     build > "$LOG" 2>&1 < /dev/null || fail
+  build_signed -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards -configuration Debug \
+     -destination "generic/platform=iOS" -derivedDataPath "$DD" -allowProvisioningUpdates "${TEAMARG[@]}" || fail
   APP=$(ls -d "$DD"/Build/Products/Debug-iphoneos/*.app | head -1)
   echo "✓ 建置完成"
   JSON=$(mktemp)
@@ -137,10 +188,11 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "mac" ] || [ "$WHAT" = "catalyst" ] || [ "
     #  arm64; with the Mac version switched off above, that is the iPad-app destination)
     if [ -n "$DID" ]; then DESTSPEC="platform=macOS,arch=arm64,id=$DID"
     else DESTSPEC="platform=macOS,arch=arm64,variant=Designed for iPad"; fi
-    xcodebuild -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards -configuration Debug \
+    SHOWD=$(grep -E "platform:macOS" "$LOG" | head -5)
+    build_signed -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards -configuration Debug \
          -destination "$DESTSPEC" -derivedDataPath "$MDD" \
          -allowProvisioningUpdates -allowProvisioningDeviceRegistration "${TEAMARG[@]}" \
-         build >> "$LOG" 2>&1 < /dev/null || { restore; echo "（可以用的目的地：）"; grep -E "platform:macOS" "$LOG" | head -5; fail; }
+         || { restore; echo "（可以用的目的地：）"; echo "$SHOWD"; fail; }
     restore
     IPAPP=$(ls -d "$MDD"/Build/Products/Debug-iphoneos/*.app | grep -v -i widget | head -1)
     NAME=$(basename "$IPAPP")
