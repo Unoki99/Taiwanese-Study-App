@@ -33,29 +33,37 @@ struct StudyView: View {
     @State private var wrong = 0
     @State private var learned: [Card] = []
     @State private var retried: Set<String> = []
+    @StateObject private var stars = StarField()
 
     var body: some View {
         NavigationStack {
-            Group {
-                if queue.isEmpty {
-                    Text(blanksOnly ? "不熟的詞裡沒有可以填空的例句。" : "沒有不熟的詞可以練習。").foregroundStyle(T.muted)
-                } else if idx >= queue.count {
-                    summary
-                } else {
-                    question(queue[idx])
+            VStack(spacing: 0) {
+                // how far through the round: the potion fills up
+                if !queue.isEmpty && idx < queue.count {
+                    HStack(spacing: 10) {
+                        PotionBar(value: Double(idx) / Double(max(queue.count, 1)), height: 22, showMarks: false, label: "練習進度")
+                        Text("\(idx + 1)／\(queue.count)").latFont(14).monospacedDigit().foregroundStyle(T.muted)
+                    }
+                    .padding(.horizontal).padding(.top, 2)
+                    .frame(maxWidth: 700)
                 }
+                Group {
+                    if queue.isEmpty {
+                        Text(blanksOnly ? "不熟的詞裡沒有可以填空的例句。" : "沒有不熟的詞可以練習。").foregroundStyle(T.muted)
+                    } else if idx >= queue.count {
+                        summary
+                    } else {
+                        question(queue[idx])
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .starBursts(stars)
             .appBackground()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }.accessibilityLabel("結束")
-                }
-                ToolbarItem(placement: .principal) {
-                    if !queue.isEmpty && idx < queue.count {
-                        ProgressView(value: Double(idx), total: Double(queue.count))
-                            .tint(T.greenInk).frame(width: 160)
-                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) { RomButton() }
             }

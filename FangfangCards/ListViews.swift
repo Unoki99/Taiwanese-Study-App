@@ -12,6 +12,8 @@ struct UnknownView: View {
     @AppStorage("goal") private var goal = 3
     @State private var studying = false
     @State private var toning = false
+    @State private var scrambling = false
+    @State private var readingOrder = false
     @State private var blanks = false
     @State private var detail: Card?
     @State private var query = ""
@@ -39,6 +41,24 @@ struct UnknownView: View {
                 .disabled(!store.unknownCards.contains { !$0.blankExamples.isEmpty })
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+                Button { scrambling = true } label: {
+                    Label("排句子", systemImage: "rectangle.3.group")
+                        .ffFont(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .softButton()
+                .disabled(store.unknownCount == 0)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+                Button { readingOrder = true } label: {
+                    Label("看字排讀音", systemImage: "character.book.closed")
+                        .ffFont(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .softButton()
+                .disabled(store.unknownCount == 0)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
                 Button { toning = true } label: {
                     Label("聲調練習", systemImage: "waveform")
                         .ffFont(.headline)
@@ -48,7 +68,7 @@ struct UnknownView: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
             } footer: {
-                Text("練習時連續答對 \(goal) 次，詞就會移到「熟悉」。往右滑可以直接移過去。例句填空：只做例句填空題。聲調練習：聽發音，選出聲調正確的拼法（先用不熟的詞，再用常用詞）。")
+                Text("練習時連續答對 \(goal) 次，詞就會移到「熟悉」。往右滑可以直接移過去。例句填空：只做例句填空題。排句子：例句被打亂了，照華語的意思把詞排回去。看字排讀音：只看漢字，把讀音照順序排。聲調練習：聽發音，選出聲調正確的拼法（先用不熟的詞，再用常用詞）。")
             }
             Section("不熟的詞（\(store.unknownCount)）") {
                 if list.isEmpty {
@@ -77,6 +97,8 @@ struct UnknownView: View {
         .fullScreenCover(isPresented: $studying) { StudyView().environmentObject(store) }
         .fullScreenCover(isPresented: $blanks) { StudyView(blanksOnly: true).environmentObject(store) }
         .fullScreenCover(isPresented: $toning) { ToneView().environmentObject(store) }
+        .fullScreenCover(isPresented: $scrambling) { ScrambleView().environmentObject(store) }
+        .fullScreenCover(isPresented: $readingOrder) { ScrambleView(readingMode: true).environmentObject(store) }
     }
 }
 

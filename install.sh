@@ -42,9 +42,17 @@ if [ ! -f "$DEST/FangfangCards/dict.json" ] || [ ! -f "$DEST/FangfangCards/cards
   bash "$DEST/build-data.sh" || { echo "✗ 沒辦法建立詞典資料。"; exit 1; }
 fi
 
+# Xcode's iOS part (a separate download in new Xcode versions): say how to get it if it's missing
+ensure_ios_platform() {
+  if ! xcodebuild -showdestinations -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards 2>&1 < /dev/null | grep -q "is not installed"; then return 0; fi
+  echo "✗ Xcode 還沒有 iOS 的元件。請打開 Xcode → Settings → Components，下載 iOS，再執行一次這個指令。"
+  exit 1
+}
+
 # "install.sh ipa": an app file (.ipa) for someone whose Mac can't build the app; they install it on their
 # iPhone/iPad with Sideloadly and their own Apple ID (Sideloadly signs it, so it's built unsigned here)
 if [ "$WHAT" = "ipa" ]; then
+  ensure_ios_platform
   echo "建置 App 檔（.ipa）…"
   IDD="$DD-ipa"
   xcodebuild -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards -configuration Release \
@@ -52,6 +60,9 @@ if [ "$WHAT" = "ipa" ]; then
      CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
      build > "$LOG" 2>&1 < /dev/null || fail
   APP=$(ls -d "$IDD"/Build/Products/Release-iphoneos/*.app | grep -v -i widget | head -1)
+  for f in cards.json dict.json; do
+    [ -f "$APP/$f" ] || { echo "✗ App 裡面沒有 $f（詞典資料沒有建好）。先執行：bash \"$DEST/build-data.sh\"，再執行一次 install.sh ipa。"; exit 1; }
+  done
   PKG=$(mktemp -d)
   mkdir -p "$PKG/Payload"
   cp -R "$APP" "$PKG/Payload/"
@@ -110,10 +121,14 @@ build_signed() {
 
 # 4. iPhone / iPad (fresh 7-day signature)
 if [ "$WHAT" = "all" ] || [ "$WHAT" = "ios" ]; then
+  ensure_ios_platform
   echo "建置 iPhone／iPad 版…（第一次大概 1–2 分鐘）"
   build_signed -project "$DEST/FangfangCards.xcodeproj" -scheme FangfangCards -configuration Debug \
      -destination "generic/platform=iOS" -derivedDataPath "$DD" -allowProvisioningUpdates "${TEAMARG[@]}" || fail
   APP=$(ls -d "$DD"/Build/Products/Debug-iphoneos/*.app | head -1)
+  for f in cards.json dict.json; do
+    [ -f "$APP/$f" ] || { echo "✗ App 裡面沒有 $f（詞典資料沒有建好）。先執行：bash \"$DEST/build-data.sh\"，再執行一次這個指令。"; exit 1; }
+  done
   echo "✓ 建置完成"
   JSON=$(mktemp)
   xcrun devicectl list devices --json-output "$JSON" >/dev/null 2>&1 < /dev/null
@@ -171,6 +186,7 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "mac" ] || [ "$WHAT" = "catalyst" ] || [ "
   TARGET="/Applications"
   [ -w "$TARGET" ] || { TARGET="$HOME/Applications"; mkdir -p "$TARGET"; }
   if [ "$MACKIND" = "ipad" ]; then
+    ensure_ios_platform
     echo "建置 Mac 版（iPad App）…"
     MDD="$DD-ipadmac"
     # the project is set up for the Mac version; for this build, switch it to "iPad app on the Mac"
