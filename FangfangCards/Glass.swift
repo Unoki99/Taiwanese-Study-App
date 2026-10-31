@@ -142,6 +142,15 @@ struct AppBackground: View {
     @AppStorage("glass2") private var glassOn = false
 
     var body: some View {
+        switch AppTheme.current {
+        case .witch: WitchBackground()
+        case .space: SpaceBackground()
+        case .goblin: GoblinBackground()
+        case .night: nightBody
+        }
+    }
+
+    private var nightBody: some View {
         ZStack {
             T.bg
             if glassOn {

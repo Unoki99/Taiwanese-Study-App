@@ -7,6 +7,7 @@ import AVFoundation
 struct FangfangCardsApp: App {
     @StateObject private var store = Store.shared
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(AppTheme.key) private var theme = AppTheme.night.rawValue
 
     init() {
         // 皓羅 font (DejaVu Sans subset) so tone marks sit right
@@ -19,7 +20,11 @@ struct FangfangCardsApp: App {
 
     var body: some Scene {
         WindowGroup {
+            // the theme's colours are read while drawing: set it first, then draw everything again
+            let _ = AppTheme.sync(theme)
             RootView()
+                .id(theme)
+                .fontDesign((AppTheme(rawValue: theme) ?? .night).fontDesign)
                 .onAppear { MacWindow.setUp() }
                 .environmentObject(store)
                 .preferredColorScheme(.dark)
@@ -176,8 +181,8 @@ enum AppTint {
     /// light green on iPhone/iPad; on the Mac the system fills active buttons with the accent colour,
     /// so it's the darker green there (light text stays readable)
     #if targetEnvironment(macCatalyst)
-    static let accent = T.greenEdge
+    static var accent: Color { T.greenEdge }
     #else
-    static let accent = T.greenInk
+    static var accent: Color { T.greenInk }
     #endif
 }

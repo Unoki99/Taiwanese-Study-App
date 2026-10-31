@@ -18,6 +18,8 @@ struct ScrambleView: View {
         let han: AttributedString
         let rom: AttributedString
         var reading = false
+        var start = 0               // its first 漢字 in the sentence (to find the dictionary word)
+        var count = 0
         /// what has to match: the word and its reading (只看讀音: the reading)
         var text: String { reading ? String(rom.characters) : String(han.characters) + "|" + String(rom.characters) }
         static func == (a: Tile, b: Tile) -> Bool { a.id == b.id }
@@ -37,6 +39,7 @@ struct ScrambleView: View {
     @State private var revealed = false
     @State private var loading = true
     @StateObject private var stars = StarField()
+    @State private var tapped: DictKey?
     @Namespace private var ns
 
     var body: some View {
@@ -54,6 +57,7 @@ struct ScrambleView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .starBursts(stars)
+            .modifier(OpenWord(dict: store.dict, item: $tapped))
             .appBackground()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -68,7 +72,8 @@ struct ScrambleView: View {
             }
         }
         .onAppear {
-            if store.dict == nil && (place >= 0 || toneSys != 0) { store.loadDict() }
+            // the dictionary: local readings, tone colours, and the words behind the cards
+            if store.dict == nil { store.loadDict() }
             if puzzles.isEmpty { build() }
         }
         .onChange(of: store.dict != nil) { if loading { build() } }
@@ -142,9 +147,9 @@ struct ScrambleView: View {
         for (i, w) in words.enumerated() {
             var h = AttributedString()
             for k in n..<n + counts[i] { h += hanChars[k] }
-            n += counts[i]
             if h.characters.isEmpty { return nil }
-            tiles.append(Tile(id: i, han: h, rom: w, reading: readingMode))
+            tiles.append(Tile(id: i, han: h, rom: w, reading: readingMode, start: n, count: counts[i]))
+            n += counts[i]
         }
         return Puzzle(card: c, example: x, tiles: tiles, end: end)
     }
@@ -188,7 +193,7 @@ struct ScrambleView: View {
 
     private func puzzleView(_ p: Puzzle) -> some View {
         let done = isSolved(p)
-        return ScrollView {
+        return VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
                 if readingMode {
                     // only the 漢字 (the recording and the 華語 once it's done)
@@ -215,13 +220,15 @@ struct ScrambleView: View {
 
                 // the sentence being built
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(done ? (revealed ? "答案" : "排對了！") : (readingMode ? "照上面的字，把讀音照順序排" : "點下面的詞，照順序排"))
+                    Text(done ? (revealed ? "答案（點詞看意思）" : "排對了！點詞看意思") : (readingMode ? "照上面的字，把讀音照順序排" : "點下面的詞，照順序排"))
                         .ffFont(.caption, .bold).foregroundStyle(done ? T.greenInk : T.muted)
                     FlowLayout(spacing: 8, lineSpacing: 10) {
                         ForEach(Array(placed.enumerated()), id: \.element.id) { i, t in
-                            Button { take(t) } label: { tileView(t, wrong: wrongAt(p, i), right: done) }
+                            Button {
+                                // done: the card opens its word; before: it goes back down
+                                if done { if let k = key(of: t, in: p) { tapped = DictKey(k: k) } } else { take(t) }
+                            } label: { tileView(t, wrong: wrongAt(p, i), right: done) }
                                 .buttonStyle(.plain)
-                                .disabled(done)
                                 .matchedGeometryEffect(id: t.id, in: ns)
                         }
                         if done && !p.end.isEmpty {
@@ -284,7 +291,9 @@ struct ScrambleView: View {
             .padding()
             .frame(maxWidth: 760)
             .frame(maxWidth: .infinity)
+            Spacer(minLength: 0)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private func tileView(_ t: Tile, wrong: Bool, right: Bool) -> some View {
@@ -310,6 +319,25 @@ struct ScrambleView: View {
         var a = a
         for run in a.runs where run.swiftUI.foregroundColor == nil { a[run.range].swiftUI.foregroundColor = ink }
         return a
+    }
+
+    /// the dictionary word a card stands for: the word of its first 漢字 that the dictionary knows
+    /// (the sentence as the place says it, the same way as the tappable words in example sentences)
+    private func key(of t: Tile, in p: Puzzle) -> String? {
+        guard let d = store.dict,
+              let e = d.raw.ex[p.card.k]?.joined().first(where: { $0.count > 3 && $0[0] == p.example.h && $0[3] == p.example.n })
+        else { return nil }
+        var han = e[0], tpl = e[1]
+        if place >= 0 {
+            let loc = d.localizedExample(e[0], e[1], place, zh: e[2])
+            han = loc.han; tpl = loc.tpl
+        }
+        var keys: [String?] = []
+        for piece in d.exampleWords(han, tpl) {
+            for ch in piece.text where ch.unicodeScalars.first.map({ ConvertEngine.isHan($0.value) }) ?? false { keys.append(piece.key) }
+        }
+        guard t.start + t.count <= keys.count else { return nil }
+        return keys[t.start..<t.start + t.count].compactMap { $0 }.first
     }
 
     private func put(_ t: Tile) {
@@ -357,4 +385,13 @@ struct ScrambleView: View {
 
 private extension Array {
     subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
+}
+
+/// opens a dictionary word from the bottom (the same sheet as everywhere else); nothing until the dictionary is loaded
+private struct OpenWord: ViewModifier {
+    let dict: Dict?
+    @Binding var item: DictKey?
+    @ViewBuilder func body(content: Content) -> some View {
+        if let dict { content.wordOpener(dict, $item) } else { content }
+    }
 }

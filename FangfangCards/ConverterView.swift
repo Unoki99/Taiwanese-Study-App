@@ -982,7 +982,7 @@ struct FlowLayout: Layout {
         var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, maxX: CGFloat = 0
         for s in subviews {
             let sz = s.sizeThatFits(.unspecified)
-            if (x > 0 && x + sz.width > w) || (s[FlowBreak.self] && (x > 0 || y > 0 || row > 0)) {
+            if (x > 0 && x + sz.width > w + 0.5) || (s[FlowBreak.self] && (x > 0 || y > 0 || row > 0)) {
                 x = 0; y += row + (lineSpacing ?? spacing); row = 0
             }
             x += sz.width + spacing; row = max(row, sz.height); maxX = max(maxX, x - spacing)
@@ -990,10 +990,14 @@ struct FlowLayout: Layout {
         return CGSize(width: min(maxX, w), height: y + row)
     }
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        // wrap at the same width as when measuring (the bounds can be the narrower measured width), with a
+        // little room for rounding: otherwise a row could wrap here but not when measured, and the last
+        // line would hang over whatever comes below
+        let maxX = bounds.minX + max(bounds.width, proposal.width ?? 0) + 0.5
         var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
         for s in subviews {
             let sz = s.sizeThatFits(.unspecified)
-            if (x > bounds.minX && x + sz.width > bounds.maxX) || (s[FlowBreak.self] && (x > bounds.minX || y > bounds.minY || row > 0)) {
+            if (x > bounds.minX && x + sz.width > maxX) || (s[FlowBreak.self] && (x > bounds.minX || y > bounds.minY || row > 0)) {
                 x = bounds.minX; y += row + (lineSpacing ?? spacing); row = 0
             }
             s.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(sz))
@@ -2391,7 +2395,59 @@ struct WordClassPage: View {
 
 extension Dict {
     /// a verb (main meaning) whose last part is a noun in the dictionary: 洗身軀 (身軀), 食飯 (飯)
+    /// words that look like 離合詞 but are normal verbs (picked by hand): their last syllable changes tone
+    static let notVerbWithNoun: Set<String> = [
+        "不服\tpuD4 hoG8",
+        "交流\tkU1 diu5",
+        "代理\ttI7 di2",
+        "佩服\tpue7 hoG8",
+        "保領\tpø2 dNia2",
+        "信任\tsiD3 ziB7",
+        "修理\tsiu1 di2",
+        "克服\tKiøG4 hoG8",
+        "再會\tcI3 hue7",
+        "包領\tpU1 dNia2",
+        "委任\tui2 ziB7",
+        "安眠\taD1 biD5",
+        "對指\ttui3 ci2",
+        "對相\ttui3 sioG3",
+        "對頭誤\ttui3 TU5 go7",
+        "徛黃\tKia7 G5",
+        "必叉\tpiD4 Ce1",
+        "拑牢牢\tKNi5 tiU5 tiU5",
+        "指教\tci2 kU3",
+        "掩崁\taB1 KaB3",
+        "掰會\tpue2 hue7",
+        "搬運\tpNua1 uD7",
+        "撙節\tcuD2 caD4",
+        "擔任\ttaB1 ziB7",
+        "支理\tci1 di2",
+        "敗露\tpI7 do7",
+        "整理\tciøG2 di2",
+        "料理\tdiU7 di2",
+        "明品\tbiøG5 PiD2",
+        "暗崁\taB3 KaB3",
+        "暴露\tpoG8 do7",
+        "檢點\tkiaB2 tiaB2",
+        "毋知影\tB7 cI1 Nia2",
+        "發表\thuaD4 piU2",
+        "相干\tsioG1 kaD1",
+        "相會\tsioG1 hue7",
+        "知影\tcI1 Nia2",
+        "管理\tkuaD2 di2",
+        "纘袂牢\tcaD3 be7 tiU5",
+        "處理\tCu2 di2",
+        "請教\tCiøG2 kU3",
+        "貓貓相\tdNiU1 dNiU1 sioG3",
+        "負擔\thu7 taB1",
+        "辦理\tpaD7 di2",
+        "違背\tui5 pue7",
+        "金金相\tkiB1 kiB1 sioG3",
+        "體會\tTe2 hue7",
+    ]
+
     func isVerbWithNoun(_ key: String) -> Bool {
+        if Dict.notVerbWithNoun.contains(key) { return false }
         guard let pos = raw.pos[key], (pos.split(separator: "|", omittingEmptySubsequences: false).first.map(String.init) ?? "").contains("動詞") else { return false }
         let hs = Array(Dict.hanOf(key)), cs = Dict.codesOf(key).split(separator: " ").map(String.init)
         guard hs.count == cs.count, hs.count > 1 else { return false }

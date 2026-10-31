@@ -129,7 +129,7 @@ struct StudyView: View {
 
     @ViewBuilder
     private func question(_ q: Question) -> some View {
-        ScrollView {
+        VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 18) {
                 prompt(q)
                 options(q)
@@ -138,7 +138,9 @@ struct StudyView: View {
             .padding()
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
+            Spacer(minLength: 0)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .task(id: q.id) {
             if q.kind == .listen, let a = q.card.a { Player.shared.play(Audio.wordPath(a)) }
         }

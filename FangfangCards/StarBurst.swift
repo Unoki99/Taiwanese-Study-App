@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// 練習: tap anywhere and a handful of little stars in the tone colours burst out from your finger,
-/// then fall to the bottom of the screen. Just for fun (it doesn't block any button).
+/// 練習: tap anywhere and a handful of little things in the tone colours burst out from your finger,
+/// then fall to the bottom of the screen. Stars, plus something for each theme: little moons and herb leaves
+/// (女巫小屋), planets (星空), mushrooms, leaves and acorns (苔蘚小窩). Just for fun (it doesn't block any button).
 final class StarField: ObservableObject {
     struct Star: Identifiable {
         let id = UUID()
@@ -12,6 +13,18 @@ final class StarField: ObservableObject {
         let size: CGFloat
         let color: Color
         let born: Date
+        var kind: Kind = .star
+    }
+    enum Kind { case star, moon, leaf, planet, mushroom, acorn }
+
+    /// what flies in this theme (stars more often than the rest)
+    private static var kinds: [Kind] {
+        switch AppTheme.current {
+        case .night: return [.star]
+        case .witch: return [.star, .star, .moon, .leaf]
+        case .space: return [.star, .star, .planet]
+        case .goblin: return [.mushroom, .leaf, .acorn, .star]
+        }
     }
     @Published var stars: [Star] = []
 
@@ -30,7 +43,8 @@ final class StarField: ObservableObject {
                               spin: Double.random(in: -1.2...1.2),
                               size: CGFloat.random(in: 9...16),
                               color: StarField.colors[(i + Int.random(in: 0..<8)) % 8],
-                              born: now))
+                              born: now,
+                              kind: StarField.kinds.randomElement() ?? .star))
         }
         if stars.count > 160 { stars.removeFirst(stars.count - 160) }
     }
@@ -63,18 +77,56 @@ struct StarLayer: View {
                         var g = ctx
                         g.translateBy(x: p.x, y: p.y)
                         g.rotate(by: .radians(t * s.spin * 2 * .pi))
-                        let path = StarLayer.star(s.size)
-                        // a soft glow behind each star
+                        let path = StarLayer.shape(s.kind, s.size)
+                        // a soft glow behind each one
                         var glow = g
                         glow.addFilter(.blur(radius: s.size * 0.45))
                         glow.fill(path, with: .color(s.color.opacity(0.8)))
                         g.fill(path, with: .color(s.color))
+                        if s.kind == .planet {
+                            // the ring, tilted
+                            var ring = Path(ellipseIn: CGRect(x: -s.size * 1.15, y: -s.size * 0.32, width: s.size * 2.3, height: s.size * 0.64))
+                            ring = ring.applying(CGAffineTransform(rotationAngle: -0.35))
+                            g.stroke(ring, with: .color(s.color.opacity(0.9)), lineWidth: max(1.5, s.size * 0.14))
+                        }
                     }
                 }
                 .onChange(of: now) { field.sweep(height: geo.size.height, now: now) }
             }
         }
         .allowsHitTesting(false)
+    }
+
+    static func shape(_ k: StarField.Kind, _ r: CGFloat) -> Path {
+        switch k {
+        case .star: return star(r)
+        case .moon:
+            // a crescent: a circle with another circle cut out of its side
+            return Path(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r))
+                .subtracting(Path(ellipseIn: CGRect(x: -r * 0.45, y: -r * 1.05, width: 1.9 * r, height: 1.9 * r)))
+        case .leaf:
+            var p = Path()
+            p.move(to: CGPoint(x: 0, y: -r))
+            p.addQuadCurve(to: CGPoint(x: 0, y: r), control: CGPoint(x: r * 0.95, y: 0))
+            p.addQuadCurve(to: CGPoint(x: 0, y: -r), control: CGPoint(x: -r * 0.95, y: 0))
+            return p
+        case .planet:
+            let pr = r * 0.62
+            return Path(ellipseIn: CGRect(x: -pr, y: -pr, width: 2 * pr, height: 2 * pr))
+        case .mushroom:
+            var p = Path()
+            p.move(to: CGPoint(x: -r, y: 0))
+            p.addQuadCurve(to: CGPoint(x: r, y: 0), control: CGPoint(x: 0, y: -r * 1.5))
+            p.closeSubpath()
+            p.addRoundedRect(in: CGRect(x: -r * 0.28, y: -1, width: r * 0.56, height: r * 0.95), cornerSize: CGSize(width: 3, height: 3))
+            return p
+        case .acorn:
+            var p = Path(ellipseIn: CGRect(x: -r * 0.55, y: -r * 0.35, width: r * 1.1, height: r * 1.35))   // the nut
+            p.addRoundedRect(in: CGRect(x: -r * 0.72, y: -r * 0.62, width: r * 1.44, height: r * 0.45),       // the cap
+                             cornerSize: CGSize(width: r * 0.2, height: r * 0.2))
+            p.addRect(CGRect(x: -r * 0.06, y: -r * 0.9, width: r * 0.12, height: r * 0.3))                     // the stalk
+            return p
+        }
     }
 
     /// a five-pointed star with rounded-looking points
@@ -95,6 +147,8 @@ extension View {
     /// tap anywhere → tone-coloured stars (taps still reach buttons underneath)
     func starBursts(_ field: StarField) -> some View {
         self
+            // the whole screen catches taps (also the empty parts), not just the buttons and text
+            .contentShape(Rectangle())
             .overlay(StarLayer(field: field))
             .coordinateSpace(name: "stars")
             .simultaneousGesture(

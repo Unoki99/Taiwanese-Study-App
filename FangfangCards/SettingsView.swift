@@ -17,6 +17,7 @@ struct SettingsView: View {
     @AppStorage(ToneColors.key) private var toneSys = 0
     @AppStorage(SwellTest.key) private var swellTest = SwellTest.standard
     @AppStorage("widgetBG") private var widgetBG = 0.45
+    @AppStorage(AppTheme.key) private var theme = AppTheme.night.rawValue
     @AppStorage(SwellTest.animKey) private var swellAnim = SwellTest.animStandard
     @AppStorage(ToneColors.marksKey) private var toneMarks = true
     @AppStorage(ToneColors.glowKey) private var toneGlow = ToneColors.glowStandard
@@ -30,6 +31,10 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("顯示") {
+                Picker("主題", selection: $theme) {
+                    ForEach(AppTheme.allCases, id: \.self) { Text($0.name).tag($0.rawValue) }
+                }
+                .pickerStyle(.menu)
                 Picker("羅馬字", selection: $rom) {
                     ForEach(0..<3, id: \.self) { Text(ROM_NAMES[$0]).tag($0) }
                 }

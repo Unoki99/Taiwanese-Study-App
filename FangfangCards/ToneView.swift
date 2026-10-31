@@ -56,6 +56,7 @@ struct ToneView: View {
 
     @State private var queue: [ToneQuestion] = []
     @State private var idx = 0
+    @StateObject private var stars = StarField()
     @State private var chosen: ToneOption?
     @State private var right = 0
     @State private var wrong = 0
@@ -74,6 +75,7 @@ struct ToneView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .starBursts(stars)
             .appBackground()
             .navigationTitle("聲調練習")
             .navigationBarTitleDisplayMode(.inline)
@@ -102,7 +104,7 @@ struct ToneView: View {
     }
 
     private func question(_ q: ToneQuestion) -> some View {
-        ScrollView {
+        VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
                     Text("\(idx + 1) / \(queue.count)").ffFont(.footnote).foregroundStyle(T.muted)
@@ -137,7 +139,9 @@ struct ToneView: View {
             .padding()
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
+            Spacer(minLength: 0)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .task(id: q.id) {
             if let a = q.card.a { Player.shared.play(Audio.wordPath(a)) }
         }

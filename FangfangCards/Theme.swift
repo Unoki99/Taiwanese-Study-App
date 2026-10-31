@@ -9,39 +9,109 @@ extension Color {
     }
 }
 
-/// Same colours as the 方方 website and Safari extension.
+/// 主題 (設定 → 顯示 → 主題): 方方之夜 is the original look; 女巫小屋 a candle-lit witch's cottage; 星空 deep space;
+/// 苔蘚小窩 goblincore (moss, mushrooms, pebbles and little treasures). The tone colours stay the same in all of them.
+enum AppTheme: String, CaseIterable {
+    case night, witch, space, goblin
+    static let key = "appTheme"
+    /// read once per change (set from the app's root view), not on every colour lookup
+    nonisolated(unsafe) static var current: AppTheme = AppTheme(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .night
+    var name: String {
+        switch self {
+        case .night: return "方方之夜"
+        case .witch: return "女巫小屋"
+        case .space: return "星空"
+        case .goblin: return "苔蘚小窩"
+        }
+    }
+    /// letters and numbers in the theme's own style
+    var fontDesign: Font.Design {
+        switch self {
+        case .witch: return .serif
+        case .goblin: return .rounded
+        default: return .default
+        }
+    }
+    static func sync(_ raw: String) { current = AppTheme(rawValue: raw) ?? .night }
+}
+
+/// one theme's colours
+struct Palette {
+    let bg: UInt32
+    let key: UInt32
+    let keyEdge: UInt32
+    let fn: UInt32
+    let fnEdge: UInt32
+    let glyph: UInt32
+    let muted: UInt32
+    let blue: UInt32
+    let blueEdge: UInt32
+    let blueInk: UInt32
+    let green: UInt32
+    let greenEdge: UInt32
+    let greenInk: UInt32
+    let purpleInk: UInt32
+    let olive: UInt32
+    let oliveEdge: UInt32
+    let oliveInk: UInt32
+    let rust: UInt32
+    let rustEdge: UInt32
+    let rustInk: UInt32
+    let pink: UInt32
+    let guessInk: UInt32
+    let swapInk: UInt32
+    let pinkEdge: UInt32
+    let pinkInk: UInt32
+    let ownInk: UInt32
+    let own: UInt32
+    let ownEdge: UInt32
+}
+
+private enum P {
+    static let night = Palette(bg: 0x1c1c1e, key: 0x4a4a4c, keyEdge: 0x6d6d70, fn: 0x2b2b2d, fnEdge: 0x4b4b4e, glyph: 0xf2f2f2, muted: 0xa3a3a8, blue: 0x34405e, blueEdge: 0x3d4f9c, blueInk: 0xc8cfff, green: 0x44503a, greenEdge: 0x4f6c32, greenInk: 0xd4efc0, purpleInk: 0xe3c6f7, olive: 0x5a5238, oliveEdge: 0x8c7a38, oliveInk: 0xf1e3ae, rust: 0x5b4136, rustEdge: 0x8b4a2d, rustInk: 0xf3c9b2, pink: 0x5e3a4f, guessInk: 0xff7a6e, swapInk: 0xff9fd2, pinkEdge: 0xa04a78, pinkInk: 0xf8cbe2, ownInk: 0xc39bff, own: 0x4c3a5b, ownEdge: 0x7b3c9b)
+    static let witch = Palette(bg: 0x1b1611, key: 0x4a3b2c, keyEdge: 0x7d6242, fn: 0x2a221b, fnEdge: 0x5a4630, glyph: 0xf4ead5, muted: 0xb5a88d, blue: 0x2e3550, blueEdge: 0x56609a, blueInk: 0xdcd6ff, green: 0x3b4a31, greenEdge: 0x6e823d, greenInk: 0xe0ecc2, purpleInk: 0xe9cff1, olive: 0x5e4a2a, oliveEdge: 0xab853c, oliveInk: 0xf7dfab, rust: 0x5f3a29, rustEdge: 0xa0532f, rustInk: 0xf6c8a6, pink: 0x5a3442, guessInk: 0xff7a6e, swapInk: 0xff9fd2, pinkEdge: 0x9e4f6e, pinkInk: 0xf7cee0, ownInk: 0xcfa8ff, own: 0x4b3557, ownEdge: 0x8150a3)
+    static let space = Palette(bg: 0x0b0e1a, key: 0x262e4a, keyEdge: 0x46578a, fn: 0x161b2e, fnEdge: 0x2f3a5e, glyph: 0xeef1ff, muted: 0x9aa3c7, blue: 0x1f2d5c, blueEdge: 0x3b5bd6, blueInk: 0xc6d4ff, green: 0x1d4446, greenEdge: 0x2f8f86, greenInk: 0xc4f5ec, purpleInk: 0xe2ccff, olive: 0x4f4220, oliveEdge: 0xc9a43a, oliveInk: 0xffe9a8, rust: 0x56283a, rustEdge: 0xb0446a, rustInk: 0xffc2d4, pink: 0x4a2858, guessInk: 0xff7a6e, swapInk: 0xff9fd2, pinkEdge: 0xa14fc2, pinkInk: 0xf3cdfc, ownInk: 0xc8b4ff, own: 0x372d66, ownEdge: 0x7a5cff)
+    static let goblin = Palette(bg: 0x17170f, key: 0x3d3a24, keyEdge: 0x6e683a, fn: 0x25261a, fnEdge: 0x4d4a2c, glyph: 0xeee8d2, muted: 0xaaa58a, blue: 0x2c3a3a, blueEdge: 0x4f7470, blueInk: 0xcfe3dc, green: 0x34431f, greenEdge: 0x6b8a2e, greenInk: 0xdcedb4, purpleInk: 0xdcc7e6, olive: 0x4f4520, oliveEdge: 0x9c8a34, oliveInk: 0xf0e2a2, rust: 0x523222, rustEdge: 0x9a5a2c, rustInk: 0xf1caa6, pink: 0x4d3038, guessInk: 0xff7a6e, swapInk: 0xff9fd2, pinkEdge: 0x8e5464, pinkInk: 0xf0cfd6, ownInk: 0xc9b0e0, own: 0x3e3348, ownEdge: 0x75568a)
+    static var now: Palette {
+        switch AppTheme.current {
+        case .night: return night
+        case .witch: return witch
+        case .space: return space
+        case .goblin: return goblin
+        }
+    }
+}
+
+/// The app's colours (方方之夜 = the same as the 方方 website and Safari extension), in the chosen theme.
 enum T {
-    static let bg = Color(hex: 0x1c1c1e)
-    static let key = Color(hex: 0x4a4a4c)
-    static let keyEdge = Color(hex: 0x6d6d70)
-    static let fn = Color(hex: 0x2b2b2d)
-    static let fnEdge = Color(hex: 0x4b4b4e)
-    static let glyph = Color(hex: 0xf2f2f2)
-    static let muted = Color(hex: 0xa3a3a8)
-    static let blue = Color(hex: 0x34405e)
-    static let blueEdge = Color(hex: 0x3d4f9c)
-    static let blueInk = Color(hex: 0xc8cfff)
-    static let green = Color(hex: 0x44503a)
-    static let greenEdge = Color(hex: 0x4f6c32)
-    static let greenInk = Color(hex: 0xd4efc0)
-    static let purpleInk = Color(hex: 0xe3c6f7)
-    static let olive = Color(hex: 0x5a5238)
-    static let oliveEdge = Color(hex: 0x8c7a38)
-    static let oliveInk = Color(hex: 0xf1e3ae)
-    static let rust = Color(hex: 0x5b4136)
-    static let rustEdge = Color(hex: 0x8b4a2d)
-    static let rustInk = Color(hex: 0xf3c9b2)
-    static let pink = Color(hex: 0x5e3a4f)
-    /// guessed (推測) readings
-    static let guessInk = Color(hex: 0xff7a6e)
-    /// a word swapped for the one the chosen place uses (各地講法)
-    static let swapInk = Color(hex: 0xff9fd2)
-    static let pinkEdge = Color(hex: 0xa04a78)
-    static let pinkInk = Color(hex: 0xf8cbe2)
-    /// your own words (自訂), not from the MOE dictionary
-    static let ownInk = Color(hex: 0xc39bff)
-    static let own = Color(hex: 0x4c3a5b)
-    static let ownEdge = Color(hex: 0x7b3c9b)
+    static var bg: Color { Color(hex: P.now.bg) }
+    static var key: Color { Color(hex: P.now.key) }
+    static var keyEdge: Color { Color(hex: P.now.keyEdge) }
+    static var fn: Color { Color(hex: P.now.fn) }
+    static var fnEdge: Color { Color(hex: P.now.fnEdge) }
+    static var glyph: Color { Color(hex: P.now.glyph) }
+    static var muted: Color { Color(hex: P.now.muted) }
+    static var blue: Color { Color(hex: P.now.blue) }
+    static var blueEdge: Color { Color(hex: P.now.blueEdge) }
+    static var blueInk: Color { Color(hex: P.now.blueInk) }
+    static var green: Color { Color(hex: P.now.green) }
+    static var greenEdge: Color { Color(hex: P.now.greenEdge) }
+    static var greenInk: Color { Color(hex: P.now.greenInk) }
+    static var purpleInk: Color { Color(hex: P.now.purpleInk) }
+    static var olive: Color { Color(hex: P.now.olive) }
+    static var oliveEdge: Color { Color(hex: P.now.oliveEdge) }
+    static var oliveInk: Color { Color(hex: P.now.oliveInk) }
+    static var rust: Color { Color(hex: P.now.rust) }
+    static var rustEdge: Color { Color(hex: P.now.rustEdge) }
+    static var rustInk: Color { Color(hex: P.now.rustInk) }
+    static var pink: Color { Color(hex: P.now.pink) }
+    static var guessInk: Color { Color(hex: P.now.guessInk) }
+    static var swapInk: Color { Color(hex: P.now.swapInk) }
+    static var pinkEdge: Color { Color(hex: P.now.pinkEdge) }
+    static var pinkInk: Color { Color(hex: P.now.pinkInk) }
+    static var ownInk: Color { Color(hex: P.now.ownInk) }
+    static var own: Color { Color(hex: P.now.own) }
+    static var ownEdge: Color { Color(hex: P.now.ownEdge) }
 
     /// 皓羅 / 台羅 / 白話字 text
     static func lat(_ size: CGFloat) -> Font { .custom("DejaVuSans", size: size) }

@@ -144,13 +144,27 @@ extension Dict {
 
     /// nouns, 時間詞 and verbs ending in a noun keep the tone of their last syllable
     /// (`after` = the word before it, to tell a 量詞 from a 名詞)
-    func keepsLastTone(_ key: String?, after prev: String? = nil, before next: String? = nil) -> Bool {
+    /// `sense` = the word class it has here, when that's known (an example sentence listed under one of the
+    /// word's own meanings uses that meaning's class)
+    func keepsLastTone(_ key: String?, after prev: String? = nil, before next: String? = nil, sense: String? = nil) -> Bool {
         guard let key, let pos = raw.pos[key] else { return false }
         if classifierHere(key, after: prev, before: next) { return false }
-        if pos.contains("時間詞") { return true }
-        let main = pos.split(separator: "|", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        var main = pos.split(separator: "|", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        if let sense, !sense.isEmpty {
+            main = sense
+        } else {
+            if pos.contains("時間詞") { return true }
+            // a one-syllable word that is both a 名詞 and a 動詞 (相): a 名詞 after 這 / 彼 / 一 / a number /
+            // a 量詞 (這相, 一張相); otherwise a 動詞 (相厝宅, 相機會), which changes its tone
+            if main.contains("名詞"), pos.contains("動詞"), !Dict.codesOf(key).contains(" ") {
+                let pp = prev.flatMap { raw.pos[$0] } ?? ""
+                let nounHere = pp.contains("代詞") || pp.contains("數詞") || pp.contains("量詞")
+                if !nounHere { main = "動詞" }
+            }
+        }
+        if main.contains("時間詞") { return true }
         if main.contains("名詞") { return true }
-        if main.contains("動詞") {
+        if main.contains("動詞"), !Dict.notVerbWithNoun.contains(key) {
             let hs = Array(Dict.hanOf(key)), cs = Dict.codesOf(key).split(separator: " ").map(String.init)
             guard hs.count == cs.count, hs.count > 1 else { return false }
             for L in 1..<hs.count {
@@ -245,6 +259,8 @@ extension Dict {
     /// an example as shown for the place (the place's own words swapped in, its readings), with the tone
     /// of every syllable: (漢字, template, tones)
     func exampleTones(_ han: String, _ tpl: String, place: Int, zh: String?) -> (han: String, tpl: String, tones: [Int]) {
+        // the word this sentence is an example of, and the class of the meaning it's listed under
+        let head = exampleHead(han, tpl)
         var h = han, t = tpl
         if place >= 0 {
             let loc = localizedExample(han, tpl, place, zh: zh)
@@ -283,7 +299,8 @@ extension Dict {
         for (w, word) in words.enumerated() {
             let prevKey = w > 0 && !word.afterPunct ? words[w - 1].key : nil
             let nextKey = w + 1 < words.count && !words[w + 1].afterPunct ? words[w + 1].key : nil
-            if keepsLastTone(word.key, after: prevKey, before: nextKey) { keepAt.insert(n + word.count - 1) }
+            let sense = word.key != nil && word.key == head?.entry ? head?.pos : nil
+            if keepsLastTone(word.key, after: prevKey, before: nextKey, sense: sense) { keepAt.insert(n + word.count - 1) }
             n += word.count
         }
         let hanChars = h.filter { $0.unicodeScalars.first.map { ConvertEngine.isHan($0.value) } ?? false }.map { $0 }
@@ -443,4 +460,34 @@ struct ToneGlow: ViewModifier {
 }
 extension View {
     func toneGlow() -> some View { modifier(ToneGlow()) }
+}
+
+
+// MARK: which meaning an example sentence belongs to
+
+private final class ExampleHeadIndex: @unchecked Sendable {
+    static let shared = ExampleHeadIndex()
+    let lock = NSLock()
+    var map: [String: (entry: String, pos: String)]? = nil
+}
+
+extension Dict {
+    /// the entry an example sentence is listed under, and the word class of that meaning (for the tone of
+    /// the headword in its own examples: 相厝宅 is under 相's 動詞 meaning)
+    func exampleHead(_ han: String, _ tpl: String) -> (entry: String, pos: String)? {
+        let idx = ExampleHeadIndex.shared
+        idx.lock.lock(); defer { idx.lock.unlock() }
+        if idx.map == nil {
+            var m: [String: (entry: String, pos: String)] = [:]
+            for (entry, senses) in raw.ex {
+                let pos = (raw.pos[entry] ?? "").components(separatedBy: "|")
+                for (i, exs) in senses.enumerated() {
+                    let p = i < pos.count ? pos[i] : ""
+                    for e in exs where e.count > 1 { m[e[0] + "\u{1}" + e[1]] = (entry, p) }
+                }
+            }
+            idx.map = m
+        }
+        return idx.map?[han + "\u{1}" + tpl]
+    }
 }
